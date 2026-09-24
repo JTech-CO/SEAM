@@ -1,549 +1,1180 @@
-//@version=5
-indicator("SEAM Patterns", shorttitle="SEAM", overlay=true, max_lines_count=40, max_labels_count=40, max_boxes_count=20)
+//@version=6
+indicator("SEAM Patterns", shorttitle="SEAM", overlay=true, max_lines_count=400, max_labels_count=400, max_bars_back=600)
 
-// SEAM P0 — BOX + TRI_SYM
-// PRINCIPLE: confirm-on-close
-// PRINCIPLE: lock-on-recognize (upper/lower/slope never refit after lock)
-// PRINCIPLE: touch or it is not a line
-// PRINCIPLE: show != signal (formal / reference)
-// PRINCIPLE: no raw numeric playground — presets only
+// =====================================================================
+// SEAM Pattern Engine v1 — 선이 가격에 붙어야 선이다
+// 피벗 → 후보 → 인식 봉에서 경계 잠금 → 잠긴 값으로만 돌파·실패·만료 판정
+// 스펙: SEAM-pattern-engine-spec.md · 원칙: seam/docs/PRINCIPLES.md
+// =====================================================================
+// PRINCIPLE 1 confirm-on-close   인식·돌파·실패·만료는 barstate.isconfirmed 에서만 확정
+// PRINCIPLE 2 lock-on-recognize  upper/lower/us/ls 는 lockBar 에서 고정. 이후 재피팅 금지
+// PRINCIPLE 3 touch or not line  최소 접점 + 최대 이격을 통과해야 formal
+// PRINCIPLE 4 show != signal     formal = 실선 + 알림 가능, reference = 흐린 선 + 알림 없음
+// PRINCIPLE 5 pick adhesion      겹치면 밀착 점수 → 폭 큰 것 → 좁은 것
+// PRINCIPLE 6 wedge != triangle  쐐기는 별도 키. 고전 방향은 라벨에만
+// PRINCIPLE 7 no raw numeric     수치는 아래 프리셋 표에만 (presets.json.md 와 동기화)
+// PRINCIPLE 8 alerts are facts   알림은 조건 충족 사실만. 주문 문구 금지
+//
+// 불변식 (PRINCIPLE 2)
+//   liveUpper(x) = upper + us * (x - lockBar)
+//   liveLower(x) = lower + ls * (x - lockBar)
+//   lockBar 이후 upper / lower / us / ls 에 대입하는 코드를 추가하지 말 것.
 
-// ─────────────────────────────────────────
-// Inputs
-// ─────────────────────────────────────────
-string iSens     = input.string("normal", "민감도", options=["loose", "normal", "strict"], group="SEAM")
-int    iDrawN    = input.int(1, "표시 개수", minval=1, maxval=3, group="SEAM")
-bool   iShowRef  = input.bool(true, "reference 표시", group="SEAM")
-bool   iShowForm = input.bool(true, "forming 미리보기", group="SEAM")
-bool   iPanel    = input.bool(true, "상태 패널", group="SEAM")
-bool   iAlerts   = input.bool(true, "확정 알림", group="알림")
-bool   iPreviewA = input.bool(false, "미리보기 알림 (비권장)", group="알림")
+// ─────────────────────────────────────────────────────────────
+// 0. 상수
+// ─────────────────────────────────────────────────────────────
+const int MAX_PV  = 40     // 피벗 보관 개수 (방향별)
+const int MAX_BAG = 16     // 동시 추적 구조 상한
+const int EXT     = 5      // 활성 구조 선의 우측 연장 봉 수 (잠긴 식으로만 연장)
+const int LOG_N   = 8      // 확정 로그 줄 수
+const int FAM_C   = 0      // 수축류: 삼각 · 쐐기 · 페넌트
+const int FAM_P   = 1      // 평행류: 채널 · 박스 · 플래그
+const int FAM_R   = 2      // 반전류: 이중바닥 · 이중천장 · 컵핸들
 
-color  cFormal   = input.color(color.new(#4C8BF5, 0), "formal", group="색")
-color  cRef      = input.color(color.new(#8B93A7, 70), "reference", group="색")
-color  cForming  = input.color(color.new(#8B93A7, 80), "forming", group="색")
-color  cUp       = input.color(color.new(#2E7D32, 0), "상단 돌파", group="색")
-color  cDn       = input.color(color.new(#C62828, 0), "하단 이탈", group="색")
+const string DISCLAIMER = "패턴 인식은 기하 조건의 충족을 표시할 뿐 가격을 예측하지 않습니다. 신호는 주문이 아닙니다. 투자 판단과 손익은 이용자 책임입니다."
 
-// ─────────────────────────────────────────
-// Presets — PRINCIPLE: no raw numeric playground
-// ─────────────────────────────────────────
-int    pivLen    = iSens == "loose" ? 3 : iSens == "strict" ? 8 : 5
-int    minWidth  = iSens == "loose" ? 8 : iSens == "strict" ? 18 : 12
-int    maxWidth  = iSens == "loose" ? 80 : iSens == "strict" ? 60 : 70
-int    minTouches = iSens == "loose" ? 2 : 3
-float  maxGapAtr = iSens == "loose" ? 0.35 : iSens == "strict" ? 0.15 : 0.25
-float  minAdh    = iSens == "loose" ? 0.40 : iSens == "strict" ? 0.65 : 0.55
-int    maxKeep   = iSens == "loose" ? 90 : iSens == "strict" ? 50 : 70
-float  brkBufAtr = iSens == "loose" ? 0.08 : iSens == "strict" ? 0.03 : 0.05
-int    lookback  = 80
+// ─────────────────────────────────────────────────────────────
+// 1. 입력 — PRINCIPLE 7: 수치 입력 없음. 프리셋 · 토글 · 색만
+// ─────────────────────────────────────────────────────────────
+const string GRP_M = "SEAM"
+string iSens    = input.string("normal", "민감도", options=["loose", "normal", "strict"], group=GRP_M)
+int    iDrawN   = input.int(1, "표시 개수", options=[1, 2, 3], group=GRP_M, tooltip="1: 밀착 최고 · 2: + 가장 넓은 구조 · 3: + 가장 좁은 구조")
+bool   iShowRef = input.bool(true, "미달 구조 흐리게 표시 (reference)", group=GRP_M)
+bool   iPreview = input.bool(true, "형성 중 미리보기 (점선)", group=GRP_M)
+bool   iExplain = input.bool(false, "설명 툴팁", group=GRP_M)
+
+const string GRP_F = "패턴 가족"
+bool iFamC = input.bool(true, "수축류 (삼각 · 쐐기 · 페넌트)", group=GRP_F)
+bool iFamP = input.bool(true, "평행류 (채널 · 박스 · 플래그)", group=GRP_F)
+bool iFamR = input.bool(true, "반전류 (이중바닥 · 이중천장 · 컵핸들)", group=GRP_F)
+
+const string GRP_K = "패턴 개별"
+bool kTriAsc  = input.bool(true, "상승삼각", inline="k1", group=GRP_K)
+bool kTriDesc = input.bool(true, "하락삼각", inline="k1", group=GRP_K)
+bool kTriSym  = input.bool(true, "대칭삼각", inline="k1", group=GRP_K)
+bool kWedgeR  = input.bool(true, "상승쐐기", inline="k2", group=GRP_K)
+bool kWedgeF  = input.bool(true, "하락쐐기", inline="k2", group=GRP_K)
+bool kPennB   = input.bool(true, "불 페넌트", inline="k3", group=GRP_K)
+bool kPennS   = input.bool(true, "베어 페넌트", inline="k3", group=GRP_K)
+bool kChUp    = input.bool(true, "상승채널", inline="k4", group=GRP_K)
+bool kChDn    = input.bool(true, "하락채널", inline="k4", group=GRP_K)
+bool kChFlat  = input.bool(true, "횡보채널", inline="k4", group=GRP_K)
+bool kBox     = input.bool(true, "박스", inline="k5", group=GRP_K)
+bool kFlagB   = input.bool(true, "불 플래그", inline="k5", group=GRP_K)
+bool kFlagS   = input.bool(true, "베어 플래그", inline="k5", group=GRP_K)
+bool kDblBot  = input.bool(true, "이중바닥 W", inline="k6", group=GRP_K)
+bool kDblTop  = input.bool(true, "이중천장 M", inline="k6", group=GRP_K)
+bool kCup     = input.bool(true, "컵앤핸들", inline="k6", group=GRP_K)
+
+const string GRP_A = "알림"
+bool iAlertOn = input.bool(true, "확정 알림 (formal · 봉마감만)", group=GRP_A, tooltip="알림 만들기 → 조건: 이 지표 → Any alert() function call")
+bool aLock    = input.bool(true, "lock", inline="a1", group=GRP_A)
+bool aBreak   = input.bool(true, "break", inline="a1", group=GRP_A)
+bool aFail    = input.bool(true, "fail", inline="a1", group=GRP_A)
+bool aRetest  = input.bool(false, "retest", inline="a2", group=GRP_A)
+bool aExpire  = input.bool(false, "expire", inline="a2", group=GRP_A)
+bool aPreview = input.bool(false, "봉마감 전 미리보기 알림 (비권장)", group=GRP_A, tooltip="진행 중 봉에서 잠긴 선을 넘으면 preview:true 로 보냅니다. 릴레이는 기본으로 버립니다.")
+
+const string GRP_V = "화면"
+bool iPanel = input.bool(true, "상태 패널", group=GRP_V)
+bool iLog   = input.bool(true, "확정 로그 (최근 8)", group=GRP_V)
+
+const string GRP_C = "색"
+color c1    = input.color(#4C8BF5, "슬롯 1", inline="c1", group=GRP_C)
+color c2    = input.color(#E0A526, "슬롯 2", inline="c1", group=GRP_C)
+color c3    = input.color(#9C6ADE, "슬롯 3", inline="c1", group=GRP_C)
+color cUp   = input.color(#2E7D32, "상단 돌파", inline="c2", group=GRP_C)
+color cDn   = input.color(#C62828, "하단 이탈", inline="c2", group=GRP_C)
+color cRef  = input.color(#8B93A7, "reference", inline="c3", group=GRP_C)
+color cForm = input.color(#8B93A7, "forming", inline="c3", group=GRP_C)
+
+// ─────────────────────────────────────────────────────────────
+// 2. 프리셋 — PRINCIPLE 7: 수치는 여기에만 존재 (presets.json.md 와 동기화)
+//    순서: loose / normal / strict
+// ─────────────────────────────────────────────────────────────
+int   pivLen    = iSens == "loose" ? 3    : iSens == "strict" ? 8    : 5     // 주 피벗 좌우 봉
+int   minorLen  = iSens == "loose" ? 2    : iSens == "strict" ? 4    : 3     // 보조 피벗 (플래그 · 밀착)
+int   minWidth  = iSens == "loose" ? 8    : iSens == "strict" ? 18   : 12    // 최소 폭 (봉)
+int   maxWidth  = iSens == "loose" ? 90   : iSens == "strict" ? 150  : 120   // 최대 폭 (봉)
+int   minTouch  = iSens == "loose" ? 2    : 3                                // 선당 최소 접점
+float maxGap    = iSens == "loose" ? 0.35 : iSens == "strict" ? 0.15 : 0.25  // 최대 선 이격 (ATR)
+float minAdh    = iSens == "loose" ? 0.45 : iSens == "strict" ? 0.65 : 0.55  // formal 최소 밀착
+float minHeight = iSens == "loose" ? 1.2  : iSens == "strict" ? 2.5  : 1.8   // 최소 높이 (ATR, 선 두 개 구조의 넓은 쪽)
+int   maxViol   = iSens == "loose" ? 2    : iSens == "strict" ? 0    : 1     // 형성 구간 종가 관통 허용 봉 수
+float brkBuf    = iSens == "loose" ? 0.08 : iSens == "strict" ? 0.03 : 0.05  // 돌파 버퍼 (ATR)
+int   maxKeep   = iSens == "loose" ? 90   : iSens == "strict" ? 50   : 70    // lock 후 미돌파 유지 최대 봉
+int   postKeep  = 20                                                          // 돌파 후 재시험 · 실패 추적 봉
+int   retestMax = iSens == "loose" ? 8    : iSens == "strict" ? 3    : 6     // 돌파 후 재시험 인정 봉
+float flatR     = iSens == "loose" ? 0.8  : iSens == "strict" ? 0.45 : 0.6   // 구간 전체 선 변화 이하면 수평 (ATR)
+float boxFlatR  = iSens == "loose" ? 0.5  : iSens == "strict" ? 0.25 : 0.35  // 박스: 앵커 쌍 가격차 허용 (ATR, 채널보다 빡빡)
+float convRatio = iSens == "loose" ? 0.85 : iSens == "strict" ? 0.65 : 0.75  // 우측 폭 / 좌측 폭 이하면 수렴
+float parTol    = iSens == "loose" ? 0.3  : iSens == "strict" ? 0.15 : 0.2   // |우측 폭 - 좌측 폭| / 큰 폭 이하면 평행
+float apexAtr   = 0.15                                                        // 수렴 만료: 남은 폭 (ATR)
+float poleMin   = iSens == "loose" ? 2.5  : iSens == "strict" ? 3.5  : 3.0   // 깃대 최소 높이 (ATR)
+int   poleMaxB  = iSens == "loose" ? 15   : iSens == "strict" ? 10   : 12    // 깃대 최대 봉
+float poleRatio = 1.5                                                         // 깃대 높이 >= 깃 높이 * 1.5
+float flagRetr  = iSens == "loose" ? 0.62 : iSens == "strict" ? 0.38 : 0.5   // 깃 되돌림 / 깃대 상한
+int   flagMinW  = iSens == "loose" ? 5    : iSens == "strict" ? 8    : 6     // 플래그 최소 폭 (봉)
+int   flagMaxW  = iSens == "loose" ? 30   : iSens == "strict" ? 20   : 25    // 플래그 최대 폭 (봉)
+float peakTol   = iSens == "loose" ? 0.4  : iSens == "strict" ? 0.2  : 0.3   // W/M 두 피벗 차 (ATR)
+float peakPct   = iSens == "loose" ? 0.018: iSens == "strict" ? 0.008: 0.012 // W/M 두 피벗 차 (가격 비율), 둘 중 엄격한 쪽
+float wmDepth   = iSens == "loose" ? 1.5  : iSens == "strict" ? 2.5  : 2.0   // W/M 넥라인 깊이 (ATR)
+float cupDepth  = iSens == "loose" ? 2.0  : iSens == "strict" ? 3.0  : 2.5   // 컵 최소 깊이 (ATR)
+float cupMaxPct = iSens == "loose" ? 0.5  : iSens == "strict" ? 0.35 : 0.4   // 컵 깊이 / 립 가격 상한
+float lipTol    = iSens == "loose" ? 0.25 : iSens == "strict" ? 0.15 : 0.2   // 립 차이 / 컵 깊이
+float handleMax = iSens == "loose" ? 0.5  : iSens == "strict" ? 0.4  : 0.5   // 핸들 깊이 / 컵 깊이
+float supMargin = 0.1                                                         // 겹침 교체에 필요한 점수 우위
 
 float atr = ta.atr(14)
+bool  atrOk = not na(atr) and atr > 0
 
-// ─────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 3. 구조 객체
+// ─────────────────────────────────────────────────────────────
 type Seam
+    int    id
     string key
-    string grade          // formal | reference | reject
-    string phase          // forming | locked | break_up | break_down | failed | expired
-    int    lockBar
-    float  upper
-    float  lower
-    float  upperSlope     // price per bar, frozen at lock
-    float  lowerSlope
-    int    touchesU
-    int    touchesL
+    string sig = ""           // 앵커 조합 (같은 구조 재잠금 방지)
+    int    fam
+    string grade              // formal | reference
+    string phase              // locked | break_up | break_down | hold_retest | failed | expired
+    string reason = ""        // 미달 코드 (reference 일 때)
+    string bias               // up | down | either (라벨용, 판정에 쓰지 않음)
+    int    left               // 형성 시작 봉
+    int    uLeft              // 상단 선 시작 봉 (그리기)
+    int    lLeft              // 하단 선 시작 봉 (그리기)
+    int    lockBar            // LOCKED: 인식 확정 봉
+    int    lockTime           // LOCKED: 인식 봉 시각 (unix 초)
+    float  upper              // LOCKED: lockBar 에서의 상단가
+    float  lower              // LOCKED: lockBar 에서의 하단가
+    float  us                 // LOCKED: 상단 기울기 (가격/봉)
+    float  ls                 // LOCKED: 하단 기울기 (가격/봉)
+    int    tu
+    int    tl
     float  adhesion
+    float  score
     int    widthBars
     float  heightAtr
-    string rejectReason
+    float  rr                 // 위 거리 / 아래 거리 (lock 시점)
+    int    poleBars = 0
+    int    keepBars           // lock 후 미돌파 유지 최대 봉 (반전류는 형성 폭 기준으로 더 짧음)
+    int    breakDir = 0       // 1 상단 돌파, -1 하단 이탈
+    int    breakBar = -1
+    bool   retested = false
+    bool   done = false       // 추적 종료
+    bool   announced = false  // 확정 이벤트를 한 번이라도 내보냄
+    bool   vis = false        // 마지막 스타일 적용 시 화면 표시 여부
+    bool   refVis = false
+    int    slot = 0           // formal 표시 슬롯 1..3, 0 = 숨김
+    color  col
     line   lnU
     line   lnL
-    bool   alertedLock
-    bool   alertedBreak
-    bool   dead
+    label  lbLock
 
-// ─────────────────────────────────────────
-// Confirmed pivots (right side must close)
-// ─────────────────────────────────────────
-float ph = ta.pivothigh(high, pivLen, pivLen)
-float pl = ta.pivotlow(low, pivLen, pivLen)
+var array<Seam> bag = array.new<Seam>()   // 추적 중인 구조 (done 이면 봉 끝에서 제거)
+var int seq = 0                           // LOCK 일련번호
 
-var float[] pHigh = array.new_float()
-var float[] pLow  = array.new_float()
-var int[]   pHighBar = array.new_int()
-var int[]   pLowBar  = array.new_int()
+// ─────────────────────────────────────────────────────────────
+// 4. 피벗 — 오른쪽 봉이 닫혀야 확정 (PRINCIPLE 1)
+// ─────────────────────────────────────────────────────────────
+float ph  = ta.pivothigh(high, pivLen, pivLen)
+float pl  = ta.pivotlow(low, pivLen, pivLen)
+float mph = ta.pivothigh(high, minorLen, minorLen)
+float mpl = ta.pivotlow(low, minorLen, minorLen)
 
-MAX_PV = 24
+var array<float> hV  = array.new<float>()
+var array<int>   hX  = array.new<int>()
+var array<float> lV  = array.new<float>()
+var array<int>   lX  = array.new<int>()
+var array<float> mhV = array.new<float>()
+var array<int>   mhX = array.new<int>()
+var array<float> mlV = array.new<float>()
+var array<int>   mlX = array.new<int>()
 
-f_push_cap(float[] a, int[] b, float v, int bar) =>
-    array.push(a, v)
-    array.push(b, bar)
-    if array.size(a) > MAX_PV
-        array.shift(a)
-        array.shift(b)
+f_pushPivot(array<float> vs, array<int> xs, float v, int x) =>
+    array.push(vs, v)
+    array.push(xs, x)
+    if array.size(vs) > MAX_PV
+        array.shift(vs)
+        array.shift(xs)
+    array.size(vs)
 
-if not na(ph)
-    f_push_cap(pHigh, pHighBar, ph, bar_index - pivLen)
-if not na(pl)
-    f_push_cap(pLow, pLowBar, pl, bar_index - pivLen)
+// ─────────────────────────────────────────────────────────────
+// 5. 이름 · 분류 헬퍼
+// ─────────────────────────────────────────────────────────────
+f_y(float y0, float slope, int x0, int x) =>
+    y0 + slope * (x - x0)
 
-f_count_touches_h(float level, int fromBar, int toBar, bool useHigh) =>
-    int n = 0
-    int span = math.max(1, toBar - fromBar)
-    int step = math.max(1, int(span / 40))
-    for i = fromBar to toBar by step
-        float px = useHigh ? high[bar_index - i] : low[bar_index - i]
-        if not na(px) and math.abs(px - level) <= maxGapAtr * atr
-            n += 1
-    n
+f_liveU(Seam s, int x) =>
+    s.upper + s.us * (x - s.lockBar)
 
-f_adhesion_h(float level, int fromBar, int toBar, bool useHigh) =>
-    float acc = 0.0
-    int n = 0
-    int span = math.max(1, toBar - fromBar)
-    int step = math.max(1, int(span / 24))
-    for i = fromBar to toBar by step
-        float px = useHigh ? high[bar_index - i] : low[bar_index - i]
-        if not na(px) and atr > 0
-            acc += math.abs(px - level) / atr
-            n += 1
-    float gap = n > 0 ? acc / n : 9.0
-    math.max(0.0, math.min(1.0, 1.0 - gap / math.max(maxGapAtr * 2.0, 0.01)))
+f_liveL(Seam s, int x) =>
+    s.lower + s.ls * (x - s.lockBar)
 
-// Sample price along a sloped line (frozen formula after lock)
-f_line_y(float y0, float slope, int lockBar, int atBar) =>
-    y0 + slope * (atBar - lockBar)
+f_fam(string k) =>
+    str.startswith(k, "TRI") or str.startswith(k, "WEDGE") or str.startswith(k, "PENNANT") ? FAM_C : str.startswith(k, "CHANNEL") or k == "BOX" or str.startswith(k, "FLAG") ? FAM_P : FAM_R
 
-f_count_touches_s(float y0, float slope, int lockBar, int fromBar, int toBar, bool useHigh) =>
-    int n = 0
-    int span = math.max(1, toBar - fromBar)
-    int step = math.max(1, int(span / 40))
-    for i = fromBar to toBar by step
-        float lv = f_line_y(y0, slope, lockBar, i)
-        float px = useHigh ? high[bar_index - i] : low[bar_index - i]
-        if not na(px) and math.abs(px - lv) <= maxGapAtr * atr
-            n += 1
-    n
+f_bias(string k) =>
+    switch k
+        "TRI_ASC"       => "up"
+        "TRI_DESC"      => "down"
+        "WEDGE_RISING"  => "down"
+        "WEDGE_FALLING" => "up"
+        "PENNANT_BULL"  => "up"
+        "PENNANT_BEAR"  => "down"
+        "FLAG_BULL"     => "up"
+        "FLAG_BEAR"     => "down"
+        "CUP_HANDLE"    => "up"
+        "DOUBLE_BOTTOM" => "up"
+        "DOUBLE_TOP"    => "down"
+        => "either"
 
-f_adhesion_s(float y0, float slope, int lockBar, int fromBar, int toBar, bool useHigh) =>
-    float acc = 0.0
-    int n = 0
-    int span = math.max(1, toBar - fromBar)
-    int step = math.max(1, int(span / 24))
-    for i = fromBar to toBar by step
-        float lv = f_line_y(y0, slope, lockBar, i)
-        float px = useHigh ? high[bar_index - i] : low[bar_index - i]
-        if not na(px) and atr > 0
-            acc += math.abs(px - lv) / atr
-            n += 1
-    float gap = n > 0 ? acc / n : 9.0
-    math.max(0.0, math.min(1.0, 1.0 - gap / math.max(maxGapAtr * 2.0, 0.01)))
+f_name(string k) =>
+    switch k
+        "TRI_ASC"       => "상승삼각"
+        "TRI_DESC"      => "하락삼각"
+        "TRI_SYM"       => "대칭삼각"
+        "WEDGE_RISING"  => "상승쐐기"
+        "WEDGE_FALLING" => "하락쐐기"
+        "PENNANT_BULL"  => "불 페넌트"
+        "PENNANT_BEAR"  => "베어 페넌트"
+        "CHANNEL_UP"    => "상승채널"
+        "CHANNEL_DN"    => "하락채널"
+        "CHANNEL_FLAT"  => "횡보채널"
+        "BOX"           => "박스"
+        "FLAG_BULL"     => "불 플래그"
+        "FLAG_BEAR"     => "베어 플래그"
+        "CUP_HANDLE"    => "컵앤핸들"
+        "DOUBLE_BOTTOM" => "이중바닥 W"
+        "DOUBLE_TOP"    => "이중천장 M"
+        => k
 
-f_grade(int tu, int tl, float adh, int width, float heightAtr, string extraFail) =>
-    string reason = extraFail
-    string g = "formal"
-    if extraFail != ""
-        g := "reference"
-    else if tu < minTouches or tl < minTouches
-        g := "reference"
-        reason := "접점 부족"
-    else if adh < minAdh
-        g := "reference"
-        reason := "선이 뜸"
-    else if width < minWidth
-        g := "reference"
-        reason := "폭 부족"
-    else if heightAtr < 0.6
-        g := "reference"
-        reason := "높이 부족"
-    [g, reason]
+f_enabled(string k) =>
+    switch k
+        "TRI_ASC"       => iFamC and kTriAsc
+        "TRI_DESC"      => iFamC and kTriDesc
+        "TRI_SYM"       => iFamC and kTriSym
+        "WEDGE_RISING"  => iFamC and kWedgeR
+        "WEDGE_FALLING" => iFamC and kWedgeF
+        "PENNANT_BULL"  => iFamC and kPennB
+        "PENNANT_BEAR"  => iFamC and kPennS
+        "CHANNEL_UP"    => iFamP and kChUp
+        "CHANNEL_DN"    => iFamP and kChDn
+        "CHANNEL_FLAT"  => iFamP and kChFlat
+        "BOX"           => iFamP and kBox
+        "FLAG_BULL"     => iFamP and kFlagB
+        "FLAG_BEAR"     => iFamP and kFlagS
+        "CUP_HANDLE"    => iFamR and kCup
+        "DOUBLE_BOTTOM" => iFamR and kDblBot
+        "DOUBLE_TOP"    => iFamR and kDblTop
+        => false
 
-f_delete_lines(Seam s) =>
+f_biasKo(string b) =>
+    b == "up" ? "상단 돌파" : b == "down" ? "하단 이탈" : "방향 미정"
+
+f_reasonKo(string r) =>
+    switch r
+        "too_few_touches" => "접점 부족"
+        "line_float"      => "선이 뜸"
+        "line_cut"        => "선 관통"
+        "origin_mismatch" => "시작점 어긋남"
+        "width_short"     => "폭 부족"
+        "height_small"    => "높이 부족"
+        "pole_weak"       => "깃대 약함"
+        "flag_deep"       => "깃 되돌림 과다"
+        "peaks_unequal"   => "두 피벗 불일치"
+        "handle_deep"     => "핸들 과다"
+        "base_too_deep"   => "베이스 과다"
+        "cup_shape"       => "컵 비대칭"
+        "rr_lt_1"         => "거리비 1 미만"
+        => r
+
+f_explain(string k) =>
+    string rule = switch k
+        "TRI_ASC"       => "수평 저항 + 상승 지지가 수렴."
+        "TRI_DESC"      => "수평 지지 + 하락 저항이 수렴."
+        "TRI_SYM"       => "하락 저항 + 상승 지지가 수렴. 방향을 예측하지 않음."
+        "WEDGE_RISING"  => "두 선 모두 상승하며 수렴. 삼각과 별도 분류."
+        "WEDGE_FALLING" => "두 선 모두 하락하며 수렴. 삼각과 별도 분류."
+        "PENNANT_BULL"  => "급등 깃대 뒤 짧은 수렴."
+        "PENNANT_BEAR"  => "급락 깃대 뒤 짧은 수렴."
+        "CHANNEL_UP"    => "평행한 상승 두 선."
+        "CHANNEL_DN"    => "평행한 하락 두 선."
+        "CHANNEL_FLAT"  => "거의 수평인 평행 두 선."
+        "BOX"           => "수평 상 · 하단. 채널보다 기울기 허용이 좁음."
+        "FLAG_BULL"     => "급등 깃대 뒤 약한 하락/횡보 평행."
+        "FLAG_BEAR"     => "급락 깃대 뒤 약한 상승/횡보 평행."
+        "CUP_HANDLE"    => "립 두 개가 비슷하고 둥근 바닥 뒤 얕은 핸들."
+        "DOUBLE_BOTTOM" => "비슷한 두 저점과 그 사이 고점(넥라인)."
+        "DOUBLE_TOP"    => "비슷한 두 고점과 그 사이 저점(넥라인)."
+        => ""
+    f_name(k) + " · " + rule + "\n고전 기대: " + f_biasKo(f_bias(k)) + " (라벨 정보일 뿐 판정에 쓰지 않음)\n경계는 인식 봉에서 잠기고 이후 다시 맞추지 않습니다. 돌파는 봉마감 종가로만 판정합니다."
+
+f_rank(Seam s) =>
+    (s.grade == "formal" ? 10.0 : 0.0) + s.score
+
+f_better(Seam a, Seam b) =>
+    bool r = false
+    if not na(a)
+        r := na(b) ? true : f_rank(a) > f_rank(b)
+    r
+
+// ─────────────────────────────────────────────────────────────
+// 6. 선 품질 — 접점 · 관통 · 밀착 (PRINCIPLE 3)
+// ─────────────────────────────────────────────────────────────
+// 접점: 극값이 선에서 tol 이내인 봉 묶음 수 (minorLen 이내 연속 접촉은 1회)
+// 관통: 종가가 선 밖으로 tol 넘게 나간 봉 수
+f_lineStats(float y0, float slope, int x0, int fromX, int toX, bool isUpper, float tol) =>
+    int touches = 0
+    int viol = 0
+    int lastTouch = -1000000
+    if toX >= fromX
+        for x = fromX to toX
+            int off = bar_index - x
+            float lv = y0 + slope * (x - x0)
+            float ext = isUpper ? high[off] : low[off]
+            float c = close[off]
+            if not na(ext) and math.abs(ext - lv) <= tol
+                if x - lastTouch > minorLen
+                    touches += 1
+                lastTouch := x
+            if not na(c) and (isUpper ? c > lv + tol : c < lv - tol)
+                viol += 1
+    [touches, viol]
+
+// 밀착 (스펙 6.2): 해당 쪽 보조 스윙 중 구조 중앙선 너머(선 쪽)에 있는 것 = 선을 시험한 스윙
+//   gap = median(|swing - line| / ATR),  adhesion = clamp(1 - gap / maxGap, 0, 1)
+f_adhesion(float uN, float us, float lN, float ls, int x0, int fromX, int toX, bool isUpper, array<float> sv, array<int> sx) =>
+    array<float> gaps = array.new<float>()
+    int n = array.size(sx)
+    if n > 0
+        for i = 0 to n - 1
+            int x = array.get(sx, i)
+            if x >= fromX and x <= toX
+                float yu = f_y(uN, us, x0, x)
+                float yl = f_y(lN, ls, x0, x)
+                float mid = (yu + yl) / 2.0
+                float v = array.get(sv, i)
+                if isUpper ? v >= mid : v <= mid
+                    float lv = isUpper ? yu : yl
+                    array.push(gaps, math.min(math.abs(v - lv) / atr, 3.0))
+    float adh = 0.0
+    if array.size(gaps) > 0
+        adh := math.max(0.0, math.min(1.0, 1.0 - array.median(gaps) / maxGap))
+    adh
+
+// ─────────────────────────────────────────────────────────────
+// 7. 기하 분류 — 수렴 / 평행 (PRINCIPLE 6: 쐐기 ≠ 삼각)
+//    rU, rL = 구조 폭 전체에 걸친 선 변화량 (ATR 단위)
+// ─────────────────────────────────────────────────────────────
+f_classify(float rU, float rL, float hL, float hN, bool boxLike) =>
+    bool conv = hN <= hL * convRatio
+    bool par  = math.abs(hN - hL) <= parTol * math.max(hL, hN)
+    bool fU   = math.abs(rU) <= flatR
+    bool fL   = math.abs(rL) <= flatR
+    string k  = ""
+    if boxLike
+        k := "BOX"
+    else if conv
+        if fU and not fL and rL > 0
+            k := "TRI_ASC"
+        else if fL and not fU and rU < 0
+            k := "TRI_DESC"
+        else if rU < 0 and rL > 0
+            k := "TRI_SYM"
+        else if not fU and not fL and rU > 0 and rL > 0
+            k := "WEDGE_RISING"
+        else if not fU and not fL and rU < 0 and rL < 0
+            k := "WEDGE_FALLING"
+    else if par
+        float rA = (rU + rL) / 2.0
+        if math.abs(rA) <= flatR
+            k := "CHANNEL_FLAT"
+        else if rA > 0
+            k := "CHANNEL_UP"
+        else
+            k := "CHANNEL_DN"
+    k
+
+// 플래그/페넌트: 깃대 방향과 짧은 구조의 모양으로 키 결정
+f_flagKey(string k, int poleDir) =>
+    bool tri   = str.startswith(k, "TRI")
+    bool parDn = k == "CHANNEL_DN" or k == "CHANNEL_FLAT" or k == "BOX"
+    bool parUp = k == "CHANNEL_UP" or k == "CHANNEL_FLAT" or k == "BOX"
+    string r = ""
+    if poleDir == 1
+        r := tri ? "PENNANT_BULL" : parDn ? "FLAG_BULL" : ""
+    else if poleDir == -1
+        r := tri ? "PENNANT_BEAR" : parUp ? "FLAG_BEAR" : ""
+    r
+
+// 깃대: 깃(짧은 구조) 시작 left 와 그 앞 2*minorLen 봉 안의 극값이 깃대 끝.
+//        그 끝 앞 poleMaxB 봉 안에서 급하게 올라온(내려온) 이동이 깃대.
+// 반환 [방향 1/-1/0, 깃대 높이, 깃대 봉 수, 깃대 끝 가격]
+f_pole(int left) =>
+    int   offL = bar_index - left
+    float top  = high[offL]
+    int   topK = 0
+    float bot  = low[offL]
+    int   botK = 0
+    for k = 1 to minorLen * 2
+        float h = high[offL + k]
+        float l = low[offL + k]
+        if not na(h) and h > top
+            top  := h
+            topK := k
+        if not na(l) and l < bot
+            bot  := l
+            botK := k
+    float lo  = top
+    int   loK = 0
+    float hi  = bot
+    int   hiK = 0
+    for k = 1 to poleMaxB
+        float l = low[offL + topK + k]
+        float h = high[offL + botK + k]
+        if not na(l) and l < lo
+            lo  := l
+            loK := k
+        if not na(h) and h > hi
+            hi  := h
+            hiK := k
+    float upH  = top - lo
+    float dnH  = hi - bot
+    int   dir  = 0
+    float hgt  = 0.0
+    int   bars = 0
+    float tip  = 0.0
+    if loK > 0 and upH >= poleMin * atr and upH >= dnH
+        dir  := 1
+        hgt  := upH
+        bars := loK
+        tip  := top
+    else if hiK > 0 and dnH >= poleMin * atr
+        dir  := -1
+        hgt  := dnH
+        bars := hiK
+        tip  := bot
+    [dir, hgt, bars, tip]
+
+// ─────────────────────────────────────────────────────────────
+// 8. 후보 평가 — 선 두 개 (삼각 · 쐐기 · 채널 · 박스 · 플래그 · 페넌트)
+//    반환 Seam 은 이 봉에서 잠긴 값. 이후 upper/lower/us/ls 재계산 없음
+// ─────────────────────────────────────────────────────────────
+f_evalTwoLine(int x1, float y1, int x2, float y2, int x3, float y3, int x4, float y4, bool flagMode) =>
+    Seam out = na
+    int now   = bar_index
+    int left  = math.min(x1, x3)
+    int width = now - left
+    int wMin  = flagMode ? flagMinW : minWidth
+    int wMax  = flagMode ? flagMaxW : maxWidth
+    if x2 > x1 and x4 > x3 and width >= math.round(wMin * 0.6) and width <= wMax
+        float us = (y2 - y1) / (x2 - x1)
+        float ls = (y4 - y3) / (x4 - x3)
+        float uN = y2 + us * (now - x2)
+        float lN = y4 + ls * (now - x4)
+        float hL = (uN + us * (left - now)) - (lN + ls * (left - now))
+        float hN = uN - lN
+        if hL > 0 and hN > 0
+            // 박스: 두 선 모두 앵커 가격차가 박스 허용 이내 (기울기 외삽은 피벗 잡음을 키우므로 쓰지 않음)
+            bool boxLike = math.abs(y2 - y1) <= boxFlatR * atr and math.abs(y4 - y3) <= boxFlatR * atr
+            string k = f_classify(us * width / atr, ls * width / atr, hL, hN, boxLike)
+            int   poleBars = 0
+            float poleH    = 0.0
+            float poleTip  = 0.0
+            int   poleDir  = 0
+            if flagMode and k != ""
+                [pd, phh, pb, ptip] = f_pole(left)
+                poleDir  := pd
+                poleH    := phh
+                poleBars := pb
+                poleTip  := ptip
+                k := f_flagKey(k, poleDir)
+            if k != "" and f_enabled(k)
+                if k == "BOX"
+                    // 박스는 수평으로 잠근다: 두 앵커 평균 수준, 기울기 0
+                    uN := (y1 + y2) / 2.0
+                    lN := (y3 + y4) / 2.0
+                    us := 0.0
+                    ls := 0.0
+                    hN := uN - lN
+                    hL := hN
+                bool  conv = f_fam(k) == FAM_C
+                float tol  = maxGap * atr
+                float buf  = brkBuf * atr
+                // 인식 봉 종가가 이미 선 밖이면 잠그지 않음 (늦은 인식 금지)
+                bool inside = close <= uN + buf and close >= lN - buf
+                if inside and hN > 0 and (not conv or hN >= 2.0 * apexAtr * atr)
+                    [tu, vu] = f_lineStats(uN, us, now, left, now, true, tol)
+                    [tl, vl] = f_lineStats(lN, ls, now, left, now, false, tol)
+                    int   viol = vu + vl
+                    float adh  = (f_adhesion(uN, us, lN, ls, now, left, now, true, mhV, mhX) + f_adhesion(uN, us, lN, ls, now, left, now, false, mlV, mlX)) / 2.0
+                    if viol <= maxViol + 2 and adh >= 0.15
+                        int    needT = flagMode ? math.max(2, minTouch - 1) : minTouch
+                        float  hAtr  = hL / atr
+                        float  dU    = uN - close
+                        float  dL    = close - lN
+                        string b     = f_bias(k)
+                        float  rrMM  = b == "up" ? (dL > 0 ? (uN + hL - close) / dL : 99.0) : b == "down" ? (dU > 0 ? (close - (lN - hL)) / dU : 99.0) : 99.0
+                        float  retr  = poleDir == 1 ? (poleTip - math.min(lN, lN + ls * (left - now))) / poleH : poleDir == -1 ? (math.max(uN, uN + us * (left - now)) - poleTip) / poleH : 0.0
+                        string reason = ""
+                        if tu < needT or tl < needT
+                            reason := "too_few_touches"
+                        else if adh < minAdh
+                            reason := "line_float"
+                        else if viol > maxViol
+                            reason := "line_cut"
+                        else if width < wMin
+                            reason := "width_short"
+                        else if hAtr < (flagMode ? minHeight * 0.5 : minHeight)
+                            reason := "height_small"
+                        else if not flagMode and math.abs(x1 - x3) > width * 0.5
+                            reason := "origin_mismatch"
+                        else if flagMode and poleH < poleRatio * hL
+                            reason := "pole_weak"
+                        else if flagMode and retr > flagRetr
+                            reason := "flag_deep"
+                        else if rrMM < 1.0
+                            reason := "rr_lt_1"
+                        int extra = math.max(0, tu - needT) + math.max(0, tl - needT)
+                        out := Seam.new(key = k, sig = k + ":" + str.tostring(x1) + ":" + str.tostring(x2) + ":" + str.tostring(x3) + ":" + str.tostring(x4), fam = f_fam(k), grade = reason == "" ? "formal" : "reference", phase = "locked", reason = reason, bias = b, left = left, uLeft = x1, lLeft = x3, lockBar = now, lockTime = int(time / 1000.0), upper = uN, lower = lN, us = us, ls = ls, tu = tu, tl = tl, adhesion = adh, score = adh + 0.03 * math.min(extra, 5), widthBars = width, heightAtr = hAtr, rr = dL > 0 ? dU / dL : 0.0, poleBars = poleBars, keepBars = maxKeep)
+    out
+
+// ─────────────────────────────────────────────────────────────
+// 9. 후보 평가 — 반전류
+// ─────────────────────────────────────────────────────────────
+// 이중바닥 W (top=false) / 이중천장 M (top=true). x1 < x2 는 같은 쪽 주 피벗
+f_evalDouble(int x1, float v1, int x2, float v2, bool top, array<float> sv, array<int> sx) =>
+    Seam out = na
+    int now = bar_index
+    int sep = x2 - x1
+    string k = top ? "DOUBLE_TOP" : "DOUBLE_BOTTOM"
+    if f_enabled(k) and sep >= math.max(3, math.round(minWidth * 0.6)) and sep <= maxWidth
+        // 넥라인 = 두 피벗 사이 반대쪽 극값, inner = 두 피벗 사이 같은 쪽 극값
+        float neck  = na
+        int   neckX = x1
+        float inner = na
+        for x = x1 + 1 to x2 - 1
+            int off = now - x
+            if top
+                if na(neck) or low[off] < neck
+                    neck  := low[off]
+                    neckX := x
+                inner := na(inner) ? high[off] : math.max(inner, high[off])
+            else
+                if na(neck) or high[off] > neck
+                    neck  := high[off]
+                    neckX := x
+                inner := na(inner) ? low[off] : math.min(inner, low[off])
+        float ext   = top ? math.max(v1, v2) : math.min(v1, v2)
+        float depth = top ? ext - neck : neck - ext
+        float diff  = math.abs(v1 - v2)
+        float tol   = math.min(peakTol * atr, peakPct * close)
+        float buf   = brkBuf * atr
+        float tTol  = maxGap * atr
+        // 이미 넥라인을 넘었거나 극값을 깬 후보는 잠그지 않음 (늦은 인식 금지)
+        bool broken = false
+        for x = x2 to now
+            int off = now - x
+            if top ? (close[off] < neck - buf or close[off] > ext + buf) : (close[off] > neck + buf or close[off] < ext - buf)
+                broken := true
+        bool innerOk = top ? inner <= ext + tTol : inner >= ext - tTol
+        // 두 피벗 사이에 같은 쪽 주 피벗이 구조 위쪽 절반에 또 있으면 이중이 아니라 삼중 이상 → 제외
+        int ns = array.size(sx)
+        if ns > 0
+            for i = 0 to ns - 1
+                int xi = array.get(sx, i)
+                if xi > x1 and xi < x2
+                    float vi = array.get(sv, i)
+                    if top ? vi >= neck + 0.5 * depth : vi <= neck - 0.5 * depth
+                        innerOk := false
+        if not na(neck) and not broken and innerOk and depth >= 0.5 * wmDepth * atr and diff <= 3.0 * tol
+            // 선행 추세: 첫 피벗 앞 sep 봉 안에서 넥라인 너머로 깊이의 절반 이상 와 있어야 반전 구조
+            // (M 은 아래에서 올라와야, W 는 위에서 내려와야. 박스 · 삼각 안의 같은 고저는 여기서 걸러진다)
+            float prior = na
+            int   pFrom = math.max(0, x1 - sep)
+            if x1 - 1 >= pFrom
+                for x = pFrom to x1 - 1
+                    int off = now - x
+                    prior := na(prior) ? (top ? low[off] : high[off]) : top ? math.min(prior, low[off]) : math.max(prior, high[off])
+            bool originOk = na(prior) ? false : top ? prior <= neck - 0.5 * depth : prior >= neck + 0.5 * depth
+            float dU = (top ? ext : neck) - close
+            float dL = close - (top ? neck : ext)
+            float rrMM = top ? (dU > 0 ? (close - (neck - depth)) / dU : 99.0) : (dL > 0 ? (neck + depth - close) / dL : 99.0)
+            string reason = ""
+            if diff > tol
+                reason := "peaks_unequal"
+            else if depth < wmDepth * atr
+                reason := "height_small"
+            else if sep < minWidth
+                reason := "width_short"
+            else if not originOk
+                reason := "origin_mismatch"
+            else if rrMM < 1.0
+                reason := "rr_lt_1"
+            [tExt, vExt] = f_lineStats(ext, 0.0, now, x1, now, top, tTol)
+            [tNeck, vNeck] = f_lineStats(neck, 0.0, now, x1, now, not top, tTol)
+            // 밀착은 선 두 개 구조와 같은 방식 (수평 극값선 · 넥라인). 두 피벗 일치는 위 게이트가 따로 본다
+            float uLv = top ? ext : neck
+            float lLv = top ? neck : ext
+            float adh = (f_adhesion(uLv, 0.0, lLv, 0.0, now, x1, now, true, mhV, mhX) + f_adhesion(uLv, 0.0, lLv, 0.0, now, x1, now, false, mlV, mlX)) / 2.0
+            out := Seam.new(key = k, sig = k + ":" + str.tostring(x1) + ":" + str.tostring(x2), fam = FAM_R, grade = reason == "" ? "formal" : "reference", phase = "locked", reason = reason, bias = f_bias(k), left = x1, uLeft = top ? x1 : neckX, lLeft = top ? neckX : x1, lockBar = now, lockTime = int(time / 1000.0), upper = top ? ext : neck, lower = top ? neck : ext, us = 0.0, ls = 0.0, tu = top ? tExt : tNeck, tl = top ? tNeck : tExt, adhesion = adh, score = adh, widthBars = now - x1, heightAtr = depth / atr, rr = dL > 0 ? dU / dL : 0.0, keepBars = math.min(maxKeep, math.max(minWidth, sep)))
+    out
+
+// 컵앤핸들: 왼쪽 립 (xL, vL), 오른쪽 립 (xR, vR), 핸들 저점 (xH, vH)
+f_evalCup(int xL, float vL, int xR, float vR, int xH, float vH) =>
+    Seam out = na
+    int now = bar_index
+    int cw  = xR - xL
+    if kCup and iFamR and cw >= math.round(minWidth * 1.5) and cw <= maxWidth * 2 and now - xL <= 500 and xH > xR and vH < vR and xH - xR <= cw
+        float bottom = na
+        int   bx     = xL
+        float inner  = na
+        for x = xL + 1 to xR - 1
+            int off = now - x
+            if na(bottom) or low[off] < bottom
+                bottom := low[off]
+                bx     := x
+            inner := na(inner) ? high[off] : math.max(inner, high[off])
+        float lip   = math.min(vL, vR)
+        float depth = lip - bottom
+        float tTol  = maxGap * atr
+        float buf   = brkBuf * atr
+        bool broken = false
+        for x = xR + 1 to now
+            int off = now - x
+            if close[off] > vR + buf or (x >= xH and close[off] < vH - buf)
+                broken := true
+        if not na(bottom) and not broken and depth >= 0.5 * cupDepth * atr and inner <= math.max(vL, vR) + tTol and math.abs(vL - vR) <= 2.0 * lipTol * depth and vH > bottom
+            float lipDiff = math.abs(vL - vR)
+            float hRatio  = (vR - vH) / depth
+            float pos     = (bx - xL) / cw
+            float dU      = vR - close
+            float dL      = close - vH
+            float rrMM    = dL > 0 ? (vR + depth - close) / dL : 99.0
+            string reason = ""
+            if depth < cupDepth * atr
+                reason := "height_small"
+            else if lipDiff > lipTol * depth
+                reason := "peaks_unequal"
+            else if hRatio > handleMax
+                reason := "handle_deep"
+            else if pos < 0.2 or pos > 0.8
+                reason := "cup_shape"
+            else if depth / lip > cupMaxPct
+                reason := "base_too_deep"
+            else if rrMM < 1.0
+                reason := "rr_lt_1"
+            float adh = math.max(0.0, math.min(1.0, 1.0 - lipDiff / (2.0 * lipTol * depth)))
+            out := Seam.new(key = "CUP_HANDLE", sig = "CUP_HANDLE:" + str.tostring(xL) + ":" + str.tostring(xR) + ":" + str.tostring(xH), fam = FAM_R, grade = reason == "" ? "formal" : "reference", phase = "locked", reason = reason, bias = "up", left = xL, uLeft = xL, lLeft = xR, lockBar = now, lockTime = int(time / 1000.0), upper = vR, lower = vH, us = 0.0, ls = 0.0, tu = 2, tl = 1, adhesion = adh, score = adh, widthBars = now - xL, heightAtr = depth / atr, rr = dL > 0 ? dU / dL : 0.0, keepBars = math.min(maxKeep, math.max(minWidth, int(cw / 2))))
+    out
+
+// ─────────────────────────────────────────────────────────────
+// 10. 후보 열거 — 새 피벗이 확정된 봉에서만
+// ─────────────────────────────────────────────────────────────
+// 선 두 개: 상단 쌍 x 하단 쌍. 각 쪽 최근 피벗 1~2개를 끝점으로, 그 앞 1~3개를 시작점으로
+f_scanTwoLine(array<float> uv, array<int> ux, array<float> dv, array<int> dx, bool flagMode) =>
+    Seam bestC = na
+    Seam bestP = na
+    int nh = array.size(ux)
+    int nl = array.size(dx)
+    int back = flagMode ? 2 : 3
+    if nh >= 2 and nl >= 2
+        for dj = 0 to 1
+            int j = nh - 1 - dj
+            for di = 1 to back
+                int i = j - di
+                if i >= 0 and (dj == 0 or di < back)
+                    for dl = 0 to 1
+                        int l = nl - 1 - dl
+                        for dk = 1 to back
+                            int k = l - dk
+                            if k >= 0 and (dl == 0 or dk < back)
+                                Seam c = f_evalTwoLine(array.get(ux, i), array.get(uv, i), array.get(ux, j), array.get(uv, j), array.get(dx, k), array.get(dv, k), array.get(dx, l), array.get(dv, l), flagMode)
+                                if not na(c)
+                                    if c.fam == FAM_C and f_better(c, bestC)
+                                        bestC := c
+                                    else if c.fam == FAM_P and f_better(c, bestP)
+                                        bestP := c
+    [bestC, bestP]
+
+// W: 새 주 저점과 그 앞 저점 1~2개 / M: 새 주 고점과 그 앞 고점 1~2개
+f_scanDouble(array<float> vs, array<int> xs, bool top) =>
+    Seam best = na
+    int n = array.size(xs)
+    if n >= 2
+        for d = 1 to 2
+            int i = n - 1 - d
+            if i >= 0
+                Seam c = f_evalDouble(array.get(xs, i), array.get(vs, i), array.get(xs, n - 1), array.get(vs, n - 1), top, vs, xs)
+                if f_better(c, best)
+                    best := c
+    best
+
+// 컵: 새 주 저점 = 핸들 저점. 그 직전 주 고점 = 오른쪽 립. 더 앞 고점 최대 5개 = 왼쪽 립 후보
+f_scanCup() =>
+    Seam best = na
+    int nl = array.size(lX)
+    int nh = array.size(hX)
+    if nl >= 1 and nh >= 2
+        int xH = array.get(lX, nl - 1)
+        float vH = array.get(lV, nl - 1)
+        int jR = -1
+        for j = nh - 1 to 0
+            if jR < 0 and array.get(hX, j) < xH
+                jR := j
+        if jR >= 1
+            for d = 1 to 5
+                int i = jR - d
+                if i >= 0
+                    Seam c = f_evalCup(array.get(hX, i), array.get(hV, i), array.get(hX, jR), array.get(hV, jR), xH, vH)
+                    if f_better(c, best)
+                        best := c
+    best
+
+// ─────────────────────────────────────────────────────────────
+// 11. 그리기 — 선 값은 잠긴 식으로만 계산 (PRINCIPLE 2)
+// ─────────────────────────────────────────────────────────────
+f_slotColor(int slot) =>
+    slot == 1 ? c1 : slot == 2 ? c2 : c3
+
+f_mkDraw(Seam s) =>
+    int x2 = bar_index + EXT
+    color hid = color.new(c1, 100)
+    s.lnU := line.new(s.uLeft, f_liveU(s, s.uLeft), x2, f_liveU(s, x2), xloc = xloc.bar_index, color = hid, style = line.style_solid, width = 1)
+    s.lnL := line.new(s.lLeft, f_liveL(s, s.lLeft), x2, f_liveL(s, x2), xloc = xloc.bar_index, color = hid, style = line.style_solid, width = 1)
+    string tip = "LOCK #" + str.tostring(s.id) + " · " + f_name(s.key) + "\n상 " + str.tostring(s.upper, format.mintick) + " / 하 " + str.tostring(s.lower, format.mintick) + "\n밀착 " + str.tostring(s.adhesion, "0.00") + " · 접점 " + str.tostring(s.tu) + "/" + str.tostring(s.tl)
+    if iExplain
+        tip += "\n\n" + f_explain(s.key)
+    s.lbLock := label.new(s.lockBar, f_liveU(s, s.lockBar), "", xloc = xloc.bar_index, yloc = yloc.price, color = hid, style = label.style_diamond, textcolor = hid, size = size.tiny, tooltip = tip)
+    s.id
+
+// 매 확정봉: 슬롯에 따라 색 · 굵기 · 우측 연장
+f_style(Seam s) =>
+    int   x2  = bar_index + EXT
+    color col = color.new(c1, 100)
+    int   w   = 1
+    bool  vis = false
+    if s.grade == "formal" and s.slot > 0
+        col := f_slotColor(s.slot)
+        w   := 2
+        vis := true
+    else if s.grade == "reference" and s.refVis
+        col := color.new(cRef, 78)
+        vis := true
+    if vis
+        s.col := col
+    line.set_xy2(s.lnU, x2, f_liveU(s, x2))
+    line.set_xy2(s.lnL, x2, f_liveL(s, x2))
+    line.set_color(s.lnU, col)
+    line.set_color(s.lnL, col)
+    line.set_width(s.lnU, w)
+    line.set_width(s.lnL, w)
+    label.set_color(s.lbLock, s.grade == "formal" and s.slot > 0 ? col : color.new(c1, 100))
+    s.vis := vis
+    vis
+
+f_erase(Seam s) =>
     if not na(s.lnU)
         line.delete(s.lnU)
     if not na(s.lnL)
         line.delete(s.lnL)
+    if not na(s.lbLock)
+        label.delete(s.lbLock)
+    s.lnU := na
+    s.lnL := na
+    s.lbLock := na
+    s.vis := false
+    false
 
-f_style_of(string grade, string phase) =>
-    grade == "forming" or phase == "forming" ? line.style_dotted : line.style_solid
+// 추적 종료 또는 돌파 시: 보이던 formal 은 x 에서 선을 멈추고 역사로 남김.
+// reference 와 안 보이던 구조는 지움 (확정 사실이 아니므로 역사에 남기지 않음)
+f_freeze(Seam s, int x) =>
+    bool keep = s.grade == "formal" and (s.vis or s.announced)
+    if keep and not na(s.lnU)
+        if not s.vis and s.grade == "formal"
+            // 알림을 보낸 구조가 슬롯에서 밀려 있었다면 마지막 표시 색으로 복원
+            line.set_color(s.lnU, s.col)
+            line.set_color(s.lnL, s.col)
+            line.set_width(s.lnU, 2)
+            line.set_width(s.lnL, 2)
+            label.set_color(s.lbLock, s.col)
+        line.set_xy2(s.lnU, x, f_liveU(s, x))
+        line.set_xy2(s.lnL, x, f_liveL(s, x))
+    else
+        f_erase(s)
+    keep
 
-f_col_of(Seam s) =>
-    s.phase == "break_up" ? cUp : s.phase == "break_down" ? cDn : s.grade == "formal" ? cFormal : cRef
+f_evText(string ev) =>
+    ev == "break_up" ? "↑" : ev == "break_down" ? "↓" : ev == "retest" ? "재시험" : ev == "fail" ? "실패" : ev == "expire" ? "만료" : ""
 
-f_draw(Seam s, int x2) =>
-    f_delete_lines(s)
-    int x1 = s.lockBar
-    float yU1 = s.upper
-    float yL1 = s.lower
-    float yU2 = f_line_y(s.upper, s.upperSlope, s.lockBar, x2)
-    float yL2 = f_line_y(s.lower, s.lowerSlope, s.lockBar, x2)
-    color col = f_col_of(s)
-    string st = s.phase == "forming" ? line.style_dotted : line.style_solid
-    int w = s.grade == "formal" ? 2 : 1
-    s.lnU := line.new(x1, yU1, x2, yU2, xloc=xloc.bar_index, color=col, width=w, style=st)
-    s.lnL := line.new(x1, yL1, x2, yL2, xloc=xloc.bar_index, color=col, width=w, style=st)
+f_evLabel(Seam s, string ev) =>
+    bool  up  = ev == "break_up" or (ev == "retest" and s.breakDir == 1) or (ev == "fail" and s.breakDir == -1)
+    color bg  = ev == "break_up" ? cUp : ev == "break_down" ? cDn : color.new(s.col, 20)
+    label.new(bar_index, up ? high : low, s.key + " " + f_evText(ev), xloc = xloc.bar_index, yloc = up ? yloc.abovebar : yloc.belowbar, color = bg, style = up ? label.style_label_down : label.style_label_up, textcolor = color.white, size = size.small)
 
-// ─────────────────────────────────────────
-// Active structures (cap small — P0)
-// ─────────────────────────────────────────
-var Seam[] bag = array.new<Seam>()
-MAX_BAG = 6
+// ─────────────────────────────────────────────────────────────
+// 12. 알림 페이로드 (스펙 8.1) — 시크릿 없음
+// ─────────────────────────────────────────────────────────────
+f_num(float v) =>
+    na(v) ? "null" : str.tostring(math.round_to_mintick(v), "0.##########")
 
-f_overlap(Seam a, int fromB, int toB) =>
-    int a1 = a.lockBar
-    int a2 = a.lockBar + a.widthBars
-    int lo = math.max(a1, fromB)
-    int hi = math.min(a2, toB)
-    hi > lo and (hi - lo) > int(0.5 * math.max(1, math.min(a.widthBars, toB - fromB)))
+f_ticker() =>
+    syminfo.prefix == "" ? syminfo.ticker : syminfo.prefix + ":" + syminfo.ticker
 
-f_push_seam(Seam s) =>
-    // drop overlapping same-key weaker ones
-    int i = array.size(bag) - 1
-    while i >= 0
-        Seam o = array.get(bag, i)
-        if o.key == s.key and not o.dead and f_overlap(o, s.lockBar, s.lockBar + s.widthBars)
-            if s.adhesion >= o.adhesion
-                f_delete_lines(o)
-                o.dead := true
-            else
-                s.dead := true
-        i -= 1
-    if not s.dead
-        array.push(bag, s)
-        if array.size(bag) > MAX_BAG
-            Seam old = array.shift(bag)
-            f_delete_lines(old)
+f_json(Seam s, string ev, bool preview) =>
+    '{"v":1,"src":"seam","event":"' + ev + '","ticker":"' + f_ticker() + '","tf":"' + timeframe.period + '","key":"' + s.key + '","grade":"' + s.grade + '","phase":"' + s.phase + '","lock_ts":' + str.tostring(s.lockTime) + ',"bar_ts":' + str.tostring(int(time / 1000.0)) + ',"upper":' + f_num(s.upper) + ',"lower":' + f_num(s.lower) + ',"upper_now":' + f_num(f_liveU(s, bar_index)) + ',"lower_now":' + f_num(f_liveL(s, bar_index)) + ',"close":' + f_num(close) + ',"adhesion":' + str.tostring(s.adhesion, "0.00") + ',"touches":[' + str.tostring(s.tu) + ',' + str.tostring(s.tl) + '],"bias":"' + s.bias + '","reason":' + (s.reason == "" ? 'null' : '"' + s.reason + '"') + ',"preview":' + (preview ? 'true' : 'false') + '}'
 
-// ─────────────────────────────────────────
-// Detect BOX (horizontal)
-// Uses last 3 confirmed highs / lows
-// ─────────────────────────────────────────
-f_try_box() =>
-    Seam out = na
-    int nh = array.size(pHigh)
-    int nl = array.size(pLow)
-    if nh >= 2 and nl >= 2
-        float h1 = array.get(pHigh, nh - 1)
-        float h2 = array.get(pHigh, nh - 2)
-        int   hb1 = array.get(pHighBar, nh - 1)
-        int   hb2 = array.get(pHighBar, nh - 2)
-        float l1 = array.get(pLow, nl - 1)
-        float l2 = array.get(pLow, nl - 2)
-        int   lb1 = array.get(pLowBar, nl - 1)
-        int   lb2 = array.get(pLowBar, nl - 2)
-        float upper = (h1 + h2) / 2.0
-        float lower = (l1 + l2) / 2.0
-        float flatTol = maxGapAtr * atr * 1.2
-        bool highsFlat = math.abs(h1 - h2) <= flatTol
-        bool lowsFlat  = math.abs(l1 - l2) <= flatTol
-        int left = math.min(math.min(hb1, hb2), math.min(lb1, lb2))
-        int right = math.max(math.max(hb1, hb2), math.max(lb1, lb2))
-        int width = right - left
-        float height = upper - lower
-        string extra = ""
-        if not highsFlat or not lowsFlat
-            extra := "수평 아님"
-        else if height <= 0
-            extra := "높이 없음"
-        else if width > maxWidth
-            extra := "폭 과다"
-        if extra != "높이 없음" and height > 0
-            int tu = f_count_touches_h(upper, left, bar_index, true)
-            int tl = f_count_touches_h(lower, left, bar_index, false)
-            float adhU = f_adhesion_h(upper, left, bar_index, true)
-            float adhL = f_adhesion_h(lower, left, bar_index, false)
-            float adh = (adhU + adhL) / 2.0
-            float hAtr = atr > 0 ? height / atr : 0.0
-            [g, reason] = f_grade(tu, tl, adh, width, hAtr, extra)
-            if g != "reject" and adh > 0.15 and width >= math.max(6, int(minWidth * 0.6))
-                Seam s = Seam.new()
-                s.key := "BOX"
-                s.grade := g
-                s.phase := "locked"
-                s.lockBar := bar_index          // PRINCIPLE: lock-on-recognize
-                s.upper := upper                // frozen
-                s.lower := lower                // frozen
-                s.upperSlope := 0.0
-                s.lowerSlope := 0.0
-                s.touchesU := tu
-                s.touchesL := tl
-                s.adhesion := adh
-                s.widthBars := width
-                s.heightAtr := hAtr
-                s.rejectReason := reason
-                s.alertedLock := false
-                s.alertedBreak := false
-                s.dead := false
-                out := s
-    out
+f_evAllowed(string ev) =>
+    ev == "lock" ? aLock : ev == "break_up" or ev == "break_down" ? aBreak : ev == "fail" ? aFail : ev == "retest" ? aRetest : ev == "expire" ? aExpire : false
 
-// ─────────────────────────────────────────
-// Detect TRI_SYM (falling highs + rising lows)
-// Last 3 highs / 3 lows → fit two slopes, lock at recognize bar
-// ─────────────────────────────────────────
-f_slope(int x1, float y1, int x2, float y2) =>
-    x2 == x1 ? 0.0 : (y2 - y1) / (x2 - x1)
+// ─────────────────────────────────────────────────────────────
+// 13. 확정 로그 (차트 코너, 최근 8개)
+// ─────────────────────────────────────────────────────────────
+var array<string> logs = array.new<string>()
 
-f_try_tri() =>
-    Seam out = na
-    int nh = array.size(pHigh)
-    int nl = array.size(pLow)
-    if nh >= 3 and nl >= 3
-        int hx1 = array.get(pHighBar, nh - 3)
-        int hx2 = array.get(pHighBar, nh - 2)
-        int hx3 = array.get(pHighBar, nh - 1)
-        float hy1 = array.get(pHigh, nh - 3)
-        float hy2 = array.get(pHigh, nh - 2)
-        float hy3 = array.get(pHigh, nh - 1)
-        int lx1 = array.get(pLowBar, nl - 3)
-        int lx2 = array.get(pLowBar, nl - 2)
-        int lx3 = array.get(pLowBar, nl - 1)
-        float ly1 = array.get(pLow, nl - 3)
-        float ly2 = array.get(pLow, nl - 2)
-        float ly3 = array.get(pLow, nl - 1)
-        // first-to-last slope (stable, not refit later)
-        float us = f_slope(hx1, hy1, hx3, hy3)
-        float ls = f_slope(lx1, ly1, lx3, ly3)
-        int left = math.min(hx1, lx1)
-        int right = math.max(hx3, lx3)
-        int width = right - left
-        // evaluate line at lock bar (now)
-        float upperNow = hy3 + us * (bar_index - hx3)
-        float lowerNow = ly3 + ls * (bar_index - lx3)
-        float height = upperNow - lowerNow
-        float earlyH = (hy1 + us * (left - hx3)) - (ly1 + ls * (left - lx3))
-        string extra = ""
-        if us >= -0.0000001
-            extra := "상단 미하락"
-        else if ls <= 0.0000001
-            extra := "하단 미상승"
-        else if height <= 0
-            extra := "교차됨"
-        else if earlyH > 0 and height >= earlyH * 0.95
-            extra := "미수렴"
-        else if width > maxWidth
-            extra := "폭 과다"
-        if extra != "교차됨" and height > 0
-            int tu = f_count_touches_s(upperNow, us, bar_index, left, bar_index, true)
-            int tl = f_count_touches_s(lowerNow, ls, bar_index, left, bar_index, false)
-            float adhU = f_adhesion_s(upperNow, us, bar_index, left, bar_index, true)
-            float adhL = f_adhesion_s(lowerNow, ls, bar_index, left, bar_index, false)
-            float adh = (adhU + adhL) / 2.0
-            float hAtr = atr > 0 ? height / atr : 0.0
-            [g, reason] = f_grade(tu, tl, adh, width, hAtr, extra)
-            if g != "reject" and adh > 0.12 and width >= math.max(6, int(minWidth * 0.6))
-                Seam s = Seam.new()
-                s.key := "TRI_SYM"
-                s.grade := g
-                s.phase := "locked"
-                s.lockBar := bar_index
-                s.upper := upperNow             // frozen at recognize
-                s.lower := lowerNow
-                s.upperSlope := us              // frozen
-                s.lowerSlope := ls
-                s.touchesU := tu
-                s.touchesL := tl
-                s.adhesion := adh
-                s.widthBars := width
-                s.heightAtr := hAtr
-                s.rejectReason := reason
-                s.alertedLock := false
-                s.alertedBreak := false
-                s.dead := false
-                out := s
-    out
+f_log(Seam s, string ev) =>
+    string t    = str.format_time(time, timeframe.isintraday ? "MM-dd HH:mm" : "yy-MM-dd", syminfo.timezone)
+    string code = ev == "lock" ? "LOCK" : ev == "break_up" ? "UP" : ev == "break_down" ? "DOWN" : ev == "retest" ? "RETEST" : ev == "fail" ? "FAIL" : "EXPIRE"
+    string px   = ev == "lock" ? "상 " + str.tostring(s.upper, format.mintick) + " 하 " + str.tostring(s.lower, format.mintick) : ev == "break_up" ? "상 " + str.tostring(f_liveU(s, bar_index), format.mintick) : ev == "break_down" ? "하 " + str.tostring(f_liveL(s, bar_index), format.mintick) : "종가 " + str.tostring(close, format.mintick)
+    array.unshift(logs, code + " " + t + " #" + str.tostring(s.id) + " " + s.key + " " + px)
+    if array.size(logs) > LOG_N
+        array.pop(logs)
+    array.size(logs)
 
-// ─────────────────────────────────────────
-// Forming preview (unconfirmed last swings) — no lock, no alert by default
-// ─────────────────────────────────────────
-var line prevU = na
-var line prevL = na
 
-f_clear_preview() =>
-    if not na(prevU)
-        line.delete(prevU)
-    if not na(prevL)
-        line.delete(prevL)
-    prevU := na
-    prevL := na
+// ─────────────────────────────────────────────────────────────
+// 14. 겹침 · 교체 (스펙 6.4, PRINCIPLE 5)
+// ─────────────────────────────────────────────────────────────
+var array<string> sigs = array.new<string>()   // 한 번 잠근 앵커 조합은 다시 잠그지 않음
 
-// ─────────────────────────────────────────
-// Main — only on confirmed close
-// ─────────────────────────────────────────
-jsonAlert = ""
+f_overlap(Seam o, Seam c) =>
+    int   lo    = math.max(o.left, c.left)
+    int   hi    = math.min(bar_index, c.lockBar)
+    float inter = math.max(0, hi - lo)
+    float lenO  = math.max(1, bar_index - o.left)
+    float lenC  = math.max(1, c.lockBar - c.left)
+    inter / math.min(lenO, lenC)
 
-f_payload(Seam s, string event, bool preview) =>
-    string p = '{"v":1,"src":"seam","event":"' + event + '","ticker":"' + syminfo.tickerid + '","tf":"' + timeframe.period + '","key":"' + s.key + '","grade":"' + s.grade + '","phase":"' + s.phase + '","lock_ts":' + str.tostring(s.lockBar) + ',"upper":' + str.tostring(s.upper, "#.####") + ',"lower":' + str.tostring(s.lower, "#.####") + ',"close":' + str.tostring(close, "#.####") + ',"adhesion":' + str.tostring(s.adhesion, "#.###") + ',"preview":' + (preview ? "true" : "false") + '}'
-    p
+// 가족이 달라도 지금 경계가 사실상 같은 선이면 같은 구조로 본다 (예: 박스와 그 안의 이중천장)
+f_sameBounds(Seam o, Seam c) =>
+    float d = 2.0 * maxGap * atr
+    math.abs(f_liveU(o, bar_index) - c.upper) <= d and math.abs(f_liveL(o, bar_index) - c.lower) <= d and math.abs(o.us - c.us) * c.widthBars <= d and math.abs(o.ls - c.ls) * c.widthBars <= d
 
-if barstate.isconfirmed
-    // 1) advance locked structures — NEVER refit upper/lower/slope
-    int i = 0
-    while i < array.size(bag)
-        Seam s = array.get(bag, i)
-        if not s.dead and s.phase != "expired" and s.phase != "failed"
-            float liveU = f_line_y(s.upper, s.upperSlope, s.lockBar, bar_index)
-            float liveL = f_line_y(s.lower, s.lowerSlope, s.lockBar, bar_index)
-            float buf = brkBufAtr * atr
-            int age = bar_index - s.lockBar
-            if age > maxKeep or (s.key == "TRI_SYM" and liveU - liveL <= 0.15 * atr)
-                s.phase := "expired"
-                s.dead := true
-                f_delete_lines(s)
-            else if s.phase == "locked" or s.phase == "forming"
-                if close > liveU + buf
-                    s.phase := "break_up"
-                else if close < liveL - buf
-                    s.phase := "break_down"
-            else if s.phase == "break_up" and close < liveL - buf
-                s.phase := "failed"
-            else if s.phase == "break_down" and close > liveU + buf
-                s.phase := "failed"
-            if not s.dead
-                f_draw(s, bar_index + 8)
-        i += 1
+f_competes(Seam o, Seam c) =>
+    not o.done and o.phase == "locked" and ((o.fam == c.fam and f_overlap(o, c) >= 0.5) or f_sameBounds(o, c))
 
-    // 2) detect new structures (rate-limit: at most one new lock per bar)
-    bool spawned = false
-    Seam boxC = f_try_box()
-    Seam triC = f_try_tri()
-    Seam pick = na
-    if not na(boxC) and not na(triC)
-        pick := boxC.adhesion >= triC.adhesion ? boxC : triC
-    else if not na(boxC)
-        pick := boxC
-    else if not na(triC)
-        pick := triC
+// 같은 가족의 잠긴(미돌파) 구조와 50% 이상 겹치면 점수가 확실히 높을 때만 교체.
+// 교체는 "새 후보"다. 기존 구조의 값은 건드리지 않고 추적만 끝낸다 (PRINCIPLE 2).
+f_admit(Seam c) =>
+    // 같은 앵커로 formal 을 이미 잠갔으면 다시 잠그지 않음. reference 로만 잠갔던 앵커가 이후 게이트를 통과하면 formal 로 새로 잠금
+    bool ok = not array.includes(sigs, c.sig + "|formal") and not (c.grade == "reference" and array.includes(sigs, c.sig + "|reference"))
+    for o in bag
+        if ok and f_competes(o, c)
+            bool better = (c.grade == "formal" and o.grade == "reference") or (c.grade == o.grade and c.score > o.score + supMargin)
+            if not better
+                ok := false
+    if ok
+        for o in bag
+            if f_competes(o, c)
+                o.done := true
+                f_freeze(o, bar_index)
+        array.push(sigs, c.sig + "|" + c.grade)
+        if array.size(sigs) > 96
+            array.shift(sigs)
+    ok
 
-    if not na(pick)
-        // skip if same key already live with similar level
-        bool dup = false
-        int j = 0
-        while j < array.size(bag)
-            Seam o = array.get(bag, j)
-            if not o.dead and o.key == pick.key and math.abs(o.upper - pick.upper) / math.max(atr, 1e-6) < 0.4 and math.abs(o.lower - pick.lower) / math.max(atr, 1e-6) < 0.4
-                dup := true
-            j += 1
-        if not dup
-            f_push_seam(pick)
-            if not pick.dead
-                f_draw(pick, bar_index + 8)
-                spawned := true
-                if pick.grade == "formal" and iAlerts and not pick.alertedLock
-                    jsonAlert := f_payload(pick, "lock", false)
-                    pick.alertedLock := true
-
-    // 3) break alerts
-    int k = 0
-    while k < array.size(bag)
-        Seam s = array.get(bag, k)
-        if not s.dead and s.grade == "formal" and iAlerts and not s.alertedBreak and (s.phase == "break_up" or s.phase == "break_down" or s.phase == "failed")
-            string ev = s.phase == "break_up" ? "break_up" : s.phase == "break_down" ? "break_down" : "fail"
-            if jsonAlert == ""
-                jsonAlert := f_payload(s, ev, false)
-            s.alertedBreak := true
-        k += 1
-
-    // 4) forming preview from most recent two pivots (not locked)
-    f_clear_preview()
-    if iShowForm and array.size(pHigh) >= 2 and array.size(pLow) >= 2
-        int hx1 = array.get(pHighBar, array.size(pHigh) - 2)
-        int hx2 = array.get(pHighBar, array.size(pHigh) - 1)
-        float hy1 = array.get(pHigh, array.size(pHigh) - 2)
-        float hy2 = array.get(pHigh, array.size(pHigh) - 1)
-        int lx1 = array.get(pLowBar, array.size(pLow) - 2)
-        int lx2 = array.get(pLowBar, array.size(pLow) - 1)
-        float ly1 = array.get(pLow, array.size(pLow) - 2)
-        float ly2 = array.get(pLow, array.size(pLow) - 1)
-        float us = f_slope(hx1, hy1, hx2, hy2)
-        float ls = f_slope(lx1, ly1, lx2, ly2)
-        float yU2 = hy2 + us * (bar_index + 4 - hx2)
-        float yL2 = ly2 + ls * (bar_index + 4 - lx2)
-        prevU := line.new(hx1, hy1, bar_index + 4, yU2, xloc=xloc.bar_index, color=cForming, width=1, style=line.style_dotted)
-        prevL := line.new(lx1, ly1, bar_index + 4, yL2, xloc=xloc.bar_index, color=cForming, width=1, style=line.style_dotted)
-        if iPreviewA
-            Seam tmp = Seam.new()
-            tmp.key := "PREVIEW"
-            tmp.grade := "reference"
-            tmp.phase := "forming"
-            tmp.lockBar := bar_index
-            tmp.upper := hy2
-            tmp.lower := ly2
-            tmp.adhesion := 0.0
-            if jsonAlert == ""
-                jsonAlert := f_payload(tmp, "forming", true)
-
-// hide reference drawings if toggled off
-if barstate.isconfirmed and not iShowRef
-    int t = 0
-    while t < array.size(bag)
-        Seam s = array.get(bag, t)
-        if s.grade == "reference" and not s.dead
-            f_delete_lines(s)
-        t += 1
-
-// cap visible by adhesion (display count)
-if barstate.isconfirmed and array.size(bag) > 0
-    // simple: hide extras beyond iDrawN live non-dead
-    int live = 0
-    int t2 = array.size(bag) - 1
-    while t2 >= 0
-        Seam s = array.get(bag, t2)
-        if not s.dead
-            live += 1
-            if live > iDrawN
-                f_delete_lines(s)
-        t2 -= 1
-
-// ─────────────────────────────────────────
-// Panel — 4 lines
-// ─────────────────────────────────────────
-var table panel = table.new(position.top_right, 1, 5, border_width=0)
-
-f_best() =>
+// 표시 후보 고르기: mode 1 점수 최고 · 2 폭 최대 · 3 높이 최소
+f_pick(int mode, string grade) =>
     Seam best = na
-    float bestA = -1.0
-    int t = 0
-    while t < array.size(bag)
-        Seam s = array.get(bag, t)
-        if not s.dead and s.adhesion > bestA
-            bestA := s.adhesion
-            best := s
-        t += 1
+    for s in bag
+        if not s.done and s.phase == "locked" and s.grade == grade and s.slot == 0 and not s.refVis
+            if na(best)
+                best := s
+            else if mode == 1 ? s.score > best.score : mode == 2 ? s.widthBars > best.widthBars : s.heightAtr < best.heightAtr
+                best := s
     best
 
-if iPanel and barstate.islast
-    Seam b = f_best()
-    table.cell(panel, 0, 0, "SEAM  " + iSens, text_color=color.new(color.gray, 0), text_size=size.small, bgcolor=color.new(#111318, 15))
-    if na(b)
-        table.cell(panel, 0, 1, "구조 없음", text_color=color.gray, text_size=size.small, bgcolor=color.new(#111318, 15))
-        table.cell(panel, 0, 2, "", text_size=size.small, bgcolor=color.new(#111318, 15))
-        table.cell(panel, 0, 3, "", text_size=size.small, bgcolor=color.new(#111318, 15))
-        table.cell(panel, 0, 4, "BOX · TRI_SYM  P0", text_color=color.new(color.gray, 30), text_size=size.tiny, bgcolor=color.new(#111318, 15))
-    else
-        float liveU = f_line_y(b.upper, b.upperSlope, b.lockBar, bar_index)
-        float liveL = f_line_y(b.lower, b.lowerSlope, b.lockBar, bar_index)
-        float upDist = math.max(liveU - close, 0.0)
-        float dnDist = math.max(close - liveL, 0.0)
-        float rr = dnDist > 0 ? upDist / dnDist : 0.0
-        string name = b.key == "BOX" ? "박스" : "대칭삼각"
-        string classic = b.key == "TRI_SYM" ? "고전  방향 미정" : "고전  박스 이탈"
-        table.cell(panel, 0, 1, "모양  " + name + " · " + b.phase + " · " + b.grade, text_color=color.white, text_size=size.small, bgcolor=color.new(#111318, 15))
-        table.cell(panel, 0, 2, classic + "  위/아래 " + str.tostring(rr, "#.#"), text_color=color.silver, text_size=size.small, bgcolor=color.new(#111318, 15))
-        table.cell(panel, 0, 3, "LOCK #" + str.tostring(bar_index - b.lockBar) + "  접점 " + str.tostring(b.touchesU) + "/" + str.tostring(b.touchesL) + "  밀착 " + str.tostring(b.adhesion, "#.##"), text_color=color.silver, text_size=size.small, bgcolor=color.new(#111318, 15))
-        string warn = b.rejectReason != "" ? "미달  " + b.rejectReason : "잠금가  " + str.tostring(b.upper, "#.##") + " / " + str.tostring(b.lower, "#.##")
-        table.cell(panel, 0, 4, warn, text_color=color.new(color.gray, 10), text_size=size.tiny, bgcolor=color.new(#111318, 15))
+// ─────────────────────────────────────────────────────────────
+// 15. 메인 — 확정봉에서만 (PRINCIPLE 1)
+// ─────────────────────────────────────────────────────────────
+if barstate.isconfirmed
+    // 15-1) 피벗 기록
+    bool newHigh  = false
+    bool newLow   = false
+    bool newMinor = false
+    if not na(ph)
+        f_pushPivot(hV, hX, ph, bar_index - pivLen)
+        newHigh := true
+    if not na(pl)
+        f_pushPivot(lV, lX, pl, bar_index - pivLen)
+        newLow := true
+    if not na(mph)
+        f_pushPivot(mhV, mhX, mph, bar_index - minorLen)
+        newMinor := true
+    if not na(mpl)
+        f_pushPivot(mlV, mlX, mpl, bar_index - minorLen)
+        newMinor := true
 
-// ─────────────────────────────────────────
-// Alerts — one condition, JSON body
-// TradingView: Any alert() function call
-// ─────────────────────────────────────────
-alertcondition(false, title="SEAM (use Any alert() function call)", comment="Create alert on this script → Any alert() function call")
+    array<Seam>   evS = array.new<Seam>()
+    array<string> evT = array.new<string>()
+    array<bool>   evP = array.new<bool>()
 
-if jsonAlert != ""
-    alert(jsonAlert, alert.freq_once_per_bar_close)
+    // 15-2) 국면 전이 (스펙 6.5) — 잠긴 선을 시간으로 연장한 값과 종가만 비교
+    if atrOk
+        float buf = brkBuf * atr
+        float tol = maxGap * atr
+        for s in bag
+            if not s.done
+                float lu   = f_liveU(s, bar_index)
+                float ll   = f_liveL(s, bar_index)
+                bool  apex = s.fam == FAM_C and lu - ll <= apexAtr * atr
+                bool  pub  = s.grade == "formal" and (s.slot > 0 or s.announced)
+                if s.phase == "locked"
+                    if close > lu + buf or close < ll - buf
+                        s.breakDir := close > lu + buf ? 1 : -1
+                        s.phase    := s.breakDir == 1 ? "break_up" : "break_down"
+                        s.breakBar := bar_index
+                        f_freeze(s, bar_index)
+                        array.push(evS, s)
+                        array.push(evT, s.phase)
+                        array.push(evP, pub)
+                    else if bar_index - s.lockBar > s.keepBars or apex
+                        s.phase := "expired"
+                        s.done  := true
+                        f_freeze(s, bar_index)
+                        array.push(evS, s)
+                        array.push(evT, "expire")
+                        array.push(evP, pub)
+                else
+                    int  since  = bar_index - s.breakBar
+                    bool back   = s.breakDir == 1 ? (low <= lu + tol and close >= lu - buf) : (high >= ll - tol and close <= ll + buf)
+                    if (s.breakDir == 1 and close < ll - buf) or (s.breakDir == -1 and close > lu + buf)
+                        // 반대 경계 확정 이탈. 고전 방향과 반대로 먼저 깬 것은 fail 이 아니라 break (라벨만 다름)
+                        s.phase := "failed"
+                        s.done  := true
+                        array.push(evS, s)
+                        array.push(evT, "fail")
+                        array.push(evP, pub)
+                    else if not s.retested and since >= 1 and since <= retestMax and back
+                        s.phase    := "hold_retest"
+                        s.retested := true
+                        array.push(evS, s)
+                        array.push(evT, "retest")
+                        array.push(evP, pub)
+                    else if since > postKeep or apex
+                        s.done := true
 
-// lock-dot on recognize bar of best live formal
-plotshape(false, title="placeholder", style=shape.diamond, size=size.tiny)
+    // 15-3) 새 후보 — 새 피벗이 확정된 봉에서만. 가족별 최대 1개 잠금
+    if atrOk and bar_index > 30 and (newHigh or newLow or newMinor)
+        Seam bestC = na
+        Seam bestP = na
+        Seam bestR = na
+        if (newHigh or newLow) and (iFamC or iFamP)
+            [tc, tp] = f_scanTwoLine(hV, hX, lV, lX, false)
+            bestC := tc
+            bestP := tp
+        if newMinor and (iFamC or iFamP)
+            [fc, fp] = f_scanTwoLine(mhV, mhX, mlV, mlX, true)
+            if f_better(fc, bestC)
+                bestC := fc
+            if f_better(fp, bestP)
+                bestP := fp
+        if iFamR
+            if newLow
+                Seam w = f_scanDouble(lV, lX, false)
+                if f_better(w, bestR)
+                    bestR := w
+                Seam cup = f_scanCup()
+                if f_better(cup, bestR)
+                    bestR := cup
+            if newHigh
+                Seam m = f_scanDouble(hV, hX, true)
+                if f_better(m, bestR)
+                    bestR := m
+        array<Seam> cands = array.new<Seam>()
+        array.push(cands, bestC)
+        array.push(cands, bestP)
+        array.push(cands, bestR)
+        for c in cands
+            if not na(c)
+                if (c.grade == "formal" or iShowRef) and f_admit(c)
+                    seq += 1
+                    c.id := seq                    // LOCK: 이 봉에서 upper/lower/us/ls 고정
+                    f_mkDraw(c)
+                    array.push(bag, c)
+                    array.push(evS, c)
+                    array.push(evT, "lock")
+                    array.push(evP, false)         // 슬롯 선택 뒤 결정
+
+    while array.size(bag) > MAX_BAG
+        Seam old = array.shift(bag)
+        old.done := true
+        f_freeze(old, bar_index)
+
+    // 15-4) 표시 슬롯 (스펙 6.4): 1 밀착 최고 · 2 가장 넓음 · 3 가장 좁음
+    for s in bag
+        s.slot   := 0
+        s.refVis := false
+    Seam p1 = f_pick(1, "formal")
+    if not na(p1)
+        p1.slot := 1
+    if iDrawN >= 2
+        Seam p2 = f_pick(2, "formal")
+        if not na(p2)
+            p2.slot := 2
+    if iDrawN >= 3
+        Seam p3 = f_pick(3, "formal")
+        if not na(p3)
+            p3.slot := 3
+    if iShowRef
+        for r = 1 to iDrawN
+            Seam q = f_pick(1, "reference")
+            if not na(q)
+                q.refVis := true
+    for s in bag
+        if not s.done and s.phase == "locked"
+            f_style(s)
+
+    // 15-5) 이벤트 → 라벨 · 로그 · 알림. formal 이면서 화면에 있던 구조만 (PRINCIPLE 4, 8)
+    int ne = array.size(evS)
+    if ne > 0
+        for i = 0 to ne - 1
+            Seam   s   = array.get(evS, i)
+            string ev  = array.get(evT, i)
+            bool   pub = ev == "lock" ? (s.grade == "formal" and s.slot > 0) : array.get(evP, i)
+            if pub
+                s.announced := true
+                f_log(s, ev)
+                if ev != "lock"
+                    f_evLabel(s, ev)
+                if iAlertOn and f_evAllowed(ev)
+                    alert(f_json(s, ev, false), alert.freq_all)
+
+    // 15-6) 추적 끝난 구조 제거 (그림은 역사로 남거나 이미 지워짐)
+    int bi = array.size(bag) - 1
+    while bi >= 0
+        Seam s = array.get(bag, bi)
+        if s.done
+            array.remove(bag, bi)
+        bi -= 1
+
+// ─────────────────────────────────────────────────────────────
+// 16. 봉마감 전 미리보기 — 점선 · 잠금 없음 · 알림 기본 off
+// ─────────────────────────────────────────────────────────────
+var line pvU = na
+var line pvL = na
+if barstate.islast
+    if not na(pvU)
+        line.delete(pvU)
+    if not na(pvL)
+        line.delete(pvL)
+    pvU := na
+    pvL := na
+    if iPreview and array.size(hX) > 0 and array.size(lX) > 0
+        int   xh  = array.get(hX, array.size(hX) - 1)
+        float yh  = array.get(hV, array.size(hV) - 1)
+        int   xl  = array.get(lX, array.size(lX) - 1)
+        float yl  = array.get(lV, array.size(lV) - 1)
+        // 오른쪽 봉이 아직 다 닫히지 않은 최근 pivLen 봉의 극값 = 미확정 스윙
+        float ch  = high
+        int   cxh = bar_index
+        float cl  = low
+        int   cxl = bar_index
+        for k = 1 to pivLen - 1
+            if high[k] > ch
+                ch  := high[k]
+                cxh := bar_index - k
+            if low[k] < cl
+                cl  := low[k]
+                cxl := bar_index - k
+        int xe = bar_index + EXT
+        if cxh > xh
+            pvU := line.new(xh, yh, xe, yh + (ch - yh) / (cxh - xh) * (xe - xh), xloc = xloc.bar_index, color = color.new(cForm, 30), style = line.style_dotted, width = 1)
+        if cxl > xl
+            pvL := line.new(xl, yl, xe, yl + (cl - yl) / (cxl - xl) * (xe - xl), xloc = xloc.bar_index, color = color.new(cForm, 30), style = line.style_dotted, width = 1)
+
+// 진행 중 봉에서 잠긴 선을 넘으면 preview:true 로 1회 (기본 off, 릴레이는 기본으로 버림)
+if aPreview and iAlertOn and atrOk and barstate.isrealtime and not barstate.isconfirmed
+    float pbuf = brkBuf * atr
+    for s in bag
+        if not s.done and s.phase == "locked" and s.grade == "formal" and (s.slot > 0 or s.announced)
+            float lu = f_liveU(s, bar_index)
+            float ll = f_liveL(s, bar_index)
+            if close > lu + pbuf or close < ll - pbuf
+                alert(f_json(s, close > lu + pbuf ? "break_up" : "break_down", true), alert.freq_once_per_bar)
+                break
+
+// ─────────────────────────────────────────────────────────────
+// 17. 패널 (4줄 + 주의/미달) · 확정 로그
+// ─────────────────────────────────────────────────────────────
+var table panel = table.new(position.top_right, 2, 7, border_width = 0, frame_width = 0)
+var table logT  = table.new(position.bottom_right, 1, LOG_N + 1, border_width = 0, frame_width = 0)
+color BG  = color.new(#11141A, 12)
+color TXT = color.new(#D5D9E0, 0)
+color SUB = color.new(#8B93A7, 0)
+
+f_row(int r, string k, string v, color vc) =>
+    table.cell(panel, 0, r, k, text_color = SUB, text_size = size.small, bgcolor = BG, text_halign = text.align_left)
+    table.cell(panel, 1, r, v, text_color = vc, text_size = size.small, bgcolor = BG, text_halign = text.align_left)
+    r
+
+f_panelPick() =>
+    Seam b = na
+    for s in bag
+        if not s.done and s.phase == "locked"
+            if s.slot == 1
+                b := s
+            else if s.refVis and (na(b) or (b.slot != 1 and s.score > b.score))
+                b := s
+    b
+
+f_warn(Seam s, float lu, float ll) =>
+    string w = ""
+    if s.fam == FAM_C
+        if lu - ll < 0.5 * atr
+            w := "꼭짓점 임박"
+        else if math.abs(s.ls) * s.widthBars / atr > 4.0 * flatR
+            w := "지지 기울기 급함"
+        else if math.abs(s.us) * s.widthBars / atr > 4.0 * flatR
+            w := "저항 기울기 급함"
+    w
+
+if barstate.islast
+    table.clear(panel, 0, 0, 1, 6)
+    if iPanel
+        Seam b = f_panelPick()
+        table.cell(panel, 0, 0, "SEAM", text_color = TXT, text_size = size.small, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        table.cell(panel, 1, 0, iSens + (na(b) ? " · 구조 없음" : ""), text_color = SUB, text_size = size.small, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        if not na(b) and atrOk
+            float lu   = f_liveU(b, bar_index)
+            float ll   = f_liveL(b, bar_index)
+            float dU   = lu - close
+            float dL   = close - ll
+            string near = math.abs(dU) <= math.abs(dL) ? "상단까지 " + str.tostring(math.abs(dU) / atr, "0.0") + "ATR" : "하단까지 " + str.tostring(math.abs(dL) / atr, "0.0") + "ATR"
+            f_row(1, "모양", f_name(b.key) + " · " + near, TXT)
+            f_row(2, "고전", f_biasKo(b.bias), TXT)
+            f_row(3, "거리", "위/아래 = " + (dL > 0 ? str.tostring(dU / dL, "0.0") : "-"), TXT)
+            f_row(4, "상태", "LOCK #" + str.tostring(b.id) + " · 접점 " + str.tostring(b.tu) + "/" + str.tostring(b.tl) + " · 밀착 " + str.tostring(b.adhesion, "0.00"), TXT)
+            string warn = f_warn(b, lu, ll)
+            int r = 5
+            if warn != ""
+                f_row(r, "주의", warn, color.new(#E0A526, 0))
+                r += 1
+            if b.grade == "reference"
+                f_row(r, "미달", f_reasonKo(b.reason), SUB)
+
+    table.clear(logT, 0, 0, 0, LOG_N)
+    if iLog
+        int nlog = array.size(logs)
+        table.cell(logT, 0, 0, nlog > 0 ? "확정 로그" : "확정 로그 · 없음", text_color = TXT, text_size = size.tiny, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        if nlog > 0
+            for i = 0 to nlog - 1
+                table.cell(logT, 0, i + 1, array.get(logs, i), text_color = SUB, text_size = size.tiny, bgcolor = BG, text_halign = text.align_left)
+
+// ─────────────────────────────────────────────────────────────
+// 면책
+// 패턴 인식은 기하 조건의 충족을 표시할 뿐 가격을 예측하지 않는다.
+// 신호는 주문이 아니다. 투자 판단과 손익은 이용자 책임이다.
+// 불특정 다수에게 동일 규칙을 적용하는 도구이며 개별 투자 권유가 아니다.
+// ─────────────────────────────────────────────────────────────

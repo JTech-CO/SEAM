@@ -1,0 +1,22 @@
+{
+  "name": "seam-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SEAM alert relay: TradingView alert() webhook to Telegram",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3"
+  }
+}
