@@ -1,0 +1,18 @@
+{
+  "name": "seam-engine-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runs seam/pine/SEAM_Patterns.pine on synthetic OHLC with offline Pine engines and checks the spec invariants",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"*.test.mjs\""
+  },
+  "devDependencies": {
+    "@heyphat/piner": "0.13.0",
+    "@nullarch/resin": "0.2.2"
+  }
+}
