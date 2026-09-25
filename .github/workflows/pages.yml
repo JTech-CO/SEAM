@@ -1,0 +1,65 @@
+name: Demo (GitHub Pages)
+
+# Builds the static demo from the current indicator and deploys it to GitHub Pages.
+# Pull requests only build (to catch breakage); main deploys.
+# One-time setup: Settings → Pages → Build and deployment → Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - seam/pine/**
+      - seam/demo/**
+      - seam/tests/engine/**
+      - seam/relay/src/**
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - seam/pine/**
+      - seam/demo/**
+      - seam/tests/engine/**
+      - seam/relay/src/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: seam/tests/engine/package-lock.json
+      - name: Install offline Pine engine
+        working-directory: seam/tests/engine
+        run: npm ci
+      - name: Run the indicator on the demo scenarios
+        run: node seam/demo/build.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: seam/demo/site
+
+  deploy:
+    name: deploy to Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

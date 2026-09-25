@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SEAM 데모</title>
+  <meta name="description" content="SEAM Patterns 지표를 합성 차트에 봉 단위로 돌린 결과를 재생해 보는 데모입니다.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <h1>SEAM 데모</h1>
+      <p class="lede">TradingView 지표 <strong>SEAM Patterns</strong>를 합성 차트에 한 봉씩 돌린 결과입니다.
+        재생하면 선이 인식 봉에서 잠긴 뒤 다시 움직이지 않고, 돌파는 봉이 닫힌 종가로만 기록되는 과정을 볼 수 있습니다.</p>
+      <p class="note">합성 데이터 · 오프라인 엔진으로 실행한 결과 · 실시간 아님 · 투자 권유 아님</p>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <nav class="scenarios" aria-label="시나리오" id="scenario-nav"></nav>
+
+    <label class="scenario-select">
+      <span>시나리오</span>
+      <select id="scenario-select"></select>
+    </label>
+
+    <section class="stage" aria-labelledby="sc-title">
+      <div class="sc-head">
+        <h2 id="sc-title"></h2>
+        <p class="sc-meta" id="sc-meta"></p>
+        <p class="sc-note" id="sc-note"></p>
+      </div>
+
+      <p class="readout" id="readout"></p>
+      <div class="chart" id="chart"></div>
+
+      <div class="controls">
+        <button type="button" id="btn-play" aria-pressed="false">처음부터 재생</button>
+        <button type="button" id="btn-prev" aria-label="이전 봉">−1</button>
+        <button type="button" id="btn-next" aria-label="다음 봉">+1</button>
+        <input type="range" id="slider" min="0" max="0" value="0" aria-label="재생 위치 (봉)">
+        <output id="position" for="slider"></output>
+        <button type="button" id="btn-end">끝으로</button>
+      </div>
+
+      <ul class="legend" aria-label="범례">
+        <li><svg width="28" height="10" aria-hidden="true"><line x1="1" y1="5" x2="27" y2="5" class="lg-formal"/></svg>formal 선 (알림 대상)</li>
+        <li><svg width="28" height="10" aria-hidden="true"><line x1="1" y1="5" x2="27" y2="5" class="lg-ref"/></svg>reference 선 (조건 미달, 알림 없음)</li>
+        <li><svg width="12" height="12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" transform="rotate(45 6 6)" class="lg-lock"/></svg>잠금 봉</li>
+        <li><svg width="28" height="10" aria-hidden="true"><line x1="1" y1="5" x2="27" y2="5" class="lg-forming"/></svg>형성 중 미리보기 (마지막 봉에서만)</li>
+        <li><span class="lg-tag lg-up">↑</span><span class="lg-tag lg-down">↓</span>종가 확정 돌파 · 이탈</li>
+      </ul>
+    </section>
+
+    <aside class="side">
+      <section aria-labelledby="log-title">
+        <h2 id="log-title">확정 로그</h2>
+        <p class="hint">재생 위치까지 확정된 이벤트입니다. 누르면 아래에 메시지가 보입니다.</p>
+        <ol class="log" id="log"></ol>
+      </section>
+      <section aria-labelledby="msg-title">
+        <h2 id="msg-title">텔레그램 메시지</h2>
+        <p class="hint">릴레이가 실제로 보내는 문구입니다 (<code>relay/src/format.ts</code>).</p>
+        <pre class="message" id="message"></pre>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="wrap foot">
+    <p id="build-info"></p>
+    <p>패턴 인식은 기하 조건의 충족을 표시할 뿐 가격을 예측하지 않습니다. 신호는 주문이 아닙니다. 투자 판단과 손익은 이용자 책임입니다.</p>
+    <p><a href="https://github.com/JTech-CO/SEAM">저장소</a> · 지표 코드 <code>seam/pine/SEAM_Patterns.pine</code> · 이 페이지는 TradingView 가 아니라 오프라인 Pine 엔진으로 계산한 결과를 보여 줍니다.</p>
+  </footer>
+
+  <noscript><p class="wrap">이 데모는 JavaScript 가 필요합니다.</p></noscript>
+  <script src="./data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

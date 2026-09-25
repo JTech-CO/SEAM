@@ -23,6 +23,7 @@ seam/docs/                     PRINCIPLES · PATTERNS · DISCLAIMER
 seam/tests/engine/             오프라인 Pine 엔진(piner, resin)으로 지표를 돌리는 회귀 시험
 seam/tests/cases.md            실차트 수동 사례 + 스펙 11절 체크리스트
 seam/tests/check-brand.mjs     금지 명칭 · 주문형 문구 검사
+seam/demo/                     GitHub Pages 데모: build.mjs 가 지표를 봉마다 돌려 site/data.js 생성, site/ 는 뷰어
 ```
 
 ## 명령
@@ -36,6 +37,9 @@ cd seam/tests/engine && npm ci && npm test
 
 # 브랜드 검사
 node seam/tests/check-brand.mjs
+
+# 데모 데이터 (엔진 시험 의존성 설치 후)
+node seam/demo/build.mjs
 ```
 
 ## Pine 작업 메모

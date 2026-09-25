@@ -32,6 +32,8 @@ TradingView 패턴 작도 + 봉마감 확정 + 텔레그램 알림. 주식 · �
 2. **릴레이**: [`seam/relay`](seam/relay) 를 HTTPS 서버에 배포 (Docker 포함). 설정은 [`seam/relay/README.md`](seam/relay/README.md).
 3. **알림**: TradingView 알림 → 조건 "Any alert() function call" → Webhook URL `https://<도메인>/hook/<SEAM_WEBHOOK_TOKEN>`.
 
+서버 없이 먼저 보고 싶다면 **데모**: [`jtech-co.github.io/SEAM`](https://jtech-co.github.io/SEAM/) — 지표를 합성 차트에 한 봉씩 돌린 결과를 재생합니다 ([`seam/demo`](seam/demo)).
+
 ### 저장소
 
 | 경로 | 내용 |
@@ -41,6 +43,7 @@ TradingView 패턴 작도 + 봉마감 확정 + 텔레그램 알림. 주식 · �
 | `seam/relay/` | TradingView → 텔레그램 릴레이 (TypeScript, 런타임 의존성 0) |
 | `seam/docs/` | [원칙](seam/docs/PRINCIPLES.md) · [패턴](seam/docs/PATTERNS.md) · [면책](seam/docs/DISCLAIMER.md) |
 | `seam/tests/` | 오프라인 엔진 회귀 시험 · 실차트 사례 · 브랜드 검사 ([cases.md](seam/tests/cases.md)) |
+| `seam/demo/` | GitHub Pages 정적 데모 (빌드 스크립트 + 뷰어) |
 | `CLAUDE.md` | 에이전트 작업 규칙 |
 
 ### 면책

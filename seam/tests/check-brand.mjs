@@ -19,8 +19,8 @@ const ORDER = ['매수하세요', '매도하세요', '지금 사', '지금 파',
 const SCAN = ['README.md', 'CLAUDE.md', 'seam'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git']);
 const SKIP_FILES = new Set([path.join(ROOT, 'seam/tests/check-brand.mjs')]);
-const TEXT = /\.(pine|md|ts|mjs|js|json|example|yml|yaml)$|Dockerfile$/;
-const CODE = /\.(pine|ts)$/;
+const TEXT = /\.(pine|md|ts|mjs|js|json|html|css|example|yml|yaml)$|Dockerfile$/;
+const CODE = /\.(pine|ts|html|js)$/;
 
 function* walk(p) {
   const st = fs.statSync(p, { throwIfNoEntry: false });
