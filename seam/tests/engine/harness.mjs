@@ -68,6 +68,15 @@ export function randomWalk(n, seed) {
 
 export const RUN = { symbol: 'NASDAQ:TEST', timeframe: '60', mintick: 0.01 };
 
+// Executes one bar at a time (historical, every bar confirmed) and calls onStep(barIndex, engine)
+// after each bar, so callers can snapshot drawings as they were at that bar. Used by seam/demo.
+export async function stepRun(bars, inputs = {}, onStep = () => {}) {
+  const eng = new Engine(getCompiled(), new ArrayFeed(bars), { inputs });
+  eng.prepare(RUN, bars);
+  for (let i = 0; eng.step(); i++) onStep(i, eng);
+  return eng;
+}
+
 export async function run(bars, inputs = {}) {
   const eng = new Engine(getCompiled(), new ArrayFeed(bars), { inputs });
   await eng.run(RUN);
