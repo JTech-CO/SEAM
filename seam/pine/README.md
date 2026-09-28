@@ -100,5 +100,5 @@ liveLower(x) = lower + ls * (x - lockBar)
 ## 한계
 
 - TradingView 알림은 종목 · 타임프레임마다 하나씩 만들어야 합니다 (워치리스트 스캐너는 v1.1 후보).
-- TradingView 컴파일 · 실행 확인: 2026-09-28, `BINANCE:BTCUSDT` 1분봉 (v1 코드). 기록은 `seam/tests/cases.md` 0절. 오프라인 엔진 두 개(piner · resin)는 회귀 시험용이고 TradingView 컴파일러가 아니므로, Pine 을 고친 뒤에는 TradingView 에서 "차트에 추가" 로 다시 확인합니다.
+- TradingView 컴파일 · 실행 확인: 2026-09-28, `BINANCE:BTCUSDT` 1분봉 (PR #3 코드까지). 기록은 `seam/tests/cases.md` 0절. 오프라인 엔진 두 개(piner · resin)는 회귀 시험용이고 TradingView 컴파일러가 아니므로, Pine 을 고친 뒤에는 TradingView 에서 "차트에 추가" 로 다시 확인합니다.
 - 합성 데이터로 맞춘 시작값입니다. 실차트 사례(`seam/tests/cases.md`)로 조정합니다.
