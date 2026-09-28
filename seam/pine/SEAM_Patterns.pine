@@ -76,8 +76,13 @@ bool aExpire  = input.bool(false, "expire", inline="a2", group=GRP_A)
 bool aPreview = input.bool(false, "봉마감 전 미리보기 알림 (비권장)", group=GRP_A, tooltip="진행 중 봉에서 잠긴 선을 넘으면 preview:true 로 보냅니다. 릴레이는 기본으로 버립니다.")
 
 const string GRP_V = "화면"
-bool iPanel = input.bool(true, "상태 패널", group=GRP_V)
-bool iLog   = input.bool(true, "확정 로그 (최근 8)", group=GRP_V)
+bool   iPanel  = input.bool(true, "상태 패널", group=GRP_V)
+bool   iLog    = input.bool(true, "확정 로그 (최근 8)", group=GRP_V)
+string iTextSz = input.string("보통", "패널 · 로그 글자 크기", options=["작게", "보통", "크게"], group=GRP_V)
+string iLogTz  = input.string("한국", "로그 시간대", options=["한국", "UTC", "거래소"], group=GRP_V, tooltip="확정 로그의 시각 표기만 바꿉니다. 판정과 알림 JSON 의 bar_ts 는 그대로 UTC 초입니다.")
+string TXT_SIZE    = iTextSz == "작게" ? size.small : iTextSz == "크게" ? size.large : size.normal
+string LOG_TZ      = iLogTz == "한국" ? "Asia/Seoul" : iLogTz == "UTC" ? "UTC" : syminfo.timezone
+string LOG_TZ_NAME = iLogTz == "한국" ? "한국시간" : iLogTz == "UTC" ? "UTC" : "거래소 시간"
 
 const string GRP_C = "색"
 color c1    = input.color(#4C8BF5, "슬롯 1", inline="c1", group=GRP_C)
@@ -808,8 +813,9 @@ f_freeze(Seam s, int x) =>
 f_evText(string ev) =>
     ev == "break_up" ? "↑" : ev == "break_down" ? "↓" : ev == "retest" ? "재시험" : ev == "fail" ? "실패" : ev == "expire" ? "만료" : ""
 
+// 재시험 · 실패는 돌파 라벨 반대쪽에 둔다 (붙은 봉에서 겹치지 않게)
 f_evLabel(Seam s, string ev) =>
-    bool  up  = ev == "break_up" or (ev == "retest" and s.breakDir == 1) or (ev == "fail" and s.breakDir == -1)
+    bool  up  = ev == "break_up" or ((ev == "retest" or ev == "fail") and s.breakDir == -1)
     color bg  = ev == "break_up" ? cUp : ev == "break_down" ? cDn : color.new(s.col, 20)
     label.new(bar_index, up ? high : low, s.key + " " + f_evText(ev), xloc = xloc.bar_index, yloc = up ? yloc.abovebar : yloc.belowbar, color = bg, style = up ? label.style_label_down : label.style_label_up, textcolor = color.white, size = size.small)
 
@@ -833,11 +839,12 @@ f_evAllowed(string ev) =>
 // ─────────────────────────────────────────────────────────────
 var array<string> logs = array.new<string>()
 
+// 한 줄 = "코드|시각|#id 키|가격" — 표에서 네 칸으로 나눠 그린다
 f_log(Seam s, string ev) =>
-    string t    = str.format_time(time, timeframe.isintraday ? "MM-dd HH:mm" : "yy-MM-dd", syminfo.timezone)
+    string t    = str.format_time(time, timeframe.isintraday ? "MM-dd HH:mm" : "yy-MM-dd", LOG_TZ)
     string code = ev == "lock" ? "LOCK" : ev == "break_up" ? "UP" : ev == "break_down" ? "DOWN" : ev == "retest" ? "RETEST" : ev == "fail" ? "FAIL" : "EXPIRE"
     string px   = ev == "lock" ? "상 " + str.tostring(s.upper, format.mintick) + " 하 " + str.tostring(s.lower, format.mintick) : ev == "break_up" ? "상 " + str.tostring(f_liveU(s, bar_index), format.mintick) : ev == "break_down" ? "하 " + str.tostring(f_liveL(s, bar_index), format.mintick) : "종가 " + str.tostring(close, format.mintick)
-    array.unshift(logs, code + " " + t + " #" + str.tostring(s.id) + " " + s.key + " " + px)
+    array.unshift(logs, code + "|" + t + "|#" + str.tostring(s.id) + " " + s.key + "|" + px)
     if array.size(logs) > LOG_N
         array.pop(logs)
     array.size(logs)
@@ -1109,14 +1116,20 @@ if aPreview and iAlertOn and atrOk and barstate.isrealtime and not barstate.isco
 // 17. 패널 (4줄 + 주의/미달) · 확정 로그
 // ─────────────────────────────────────────────────────────────
 var table panel = table.new(position.top_right, 2, 7, border_width = 0, frame_width = 0)
-var table logT  = table.new(position.bottom_right, 1, LOG_N + 1, border_width = 0, frame_width = 0)
+var table logT  = table.new(position.bottom_right, 4, LOG_N + 1, border_width = 0, frame_width = 0)
 color BG  = color.new(#11141A, 12)
 color TXT = color.new(#D5D9E0, 0)
 color SUB = color.new(#8B93A7, 0)
+color LUP = color.new(#5FBF64, 0)
+color LDN = color.new(#EF6B6B, 0)
 
 f_row(int r, string k, string v, color vc) =>
-    table.cell(panel, 0, r, k, text_color = SUB, text_size = size.small, bgcolor = BG, text_halign = text.align_left)
-    table.cell(panel, 1, r, v, text_color = vc, text_size = size.small, bgcolor = BG, text_halign = text.align_left)
+    table.cell(panel, 0, r, k, text_color = SUB, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left)
+    table.cell(panel, 1, r, v, text_color = vc, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left)
+    r
+
+f_logCell(int c, int r, string v, color tc) =>
+    table.cell(logT, c, r, v, text_color = tc, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left)
     r
 
 f_panelPick() =>
@@ -1144,8 +1157,8 @@ if barstate.islast
     table.clear(panel, 0, 0, 1, 6)
     if iPanel
         Seam b = f_panelPick()
-        table.cell(panel, 0, 0, "SEAM", text_color = TXT, text_size = size.small, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
-        table.cell(panel, 1, 0, iSens + (na(b) ? " · 구조 없음" : ""), text_color = SUB, text_size = size.small, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        table.cell(panel, 0, 0, "SEAM", text_color = TXT, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        table.cell(panel, 1, 0, iSens + (na(b) ? " · 구조 없음" : ""), text_color = SUB, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
         if not na(b) and atrOk
             float lu   = f_liveU(b, bar_index)
             float ll   = f_liveL(b, bar_index)
@@ -1164,13 +1177,21 @@ if barstate.islast
             if b.grade == "reference"
                 f_row(r, "미달", f_reasonKo(b.reason), SUB)
 
-    table.clear(logT, 0, 0, 0, LOG_N)
+    table.clear(logT, 0, 0, 3, LOG_N)
     if iLog
         int nlog = array.size(logs)
-        table.cell(logT, 0, 0, nlog > 0 ? "확정 로그" : "확정 로그 · 없음", text_color = TXT, text_size = size.tiny, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        table.cell(logT, 0, 0, nlog > 0 ? "확정 로그" : "확정 로그 · 없음", text_color = TXT, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        f_logCell(1, 0, LOG_TZ_NAME, SUB)
+        f_logCell(2, 0, "", SUB)
+        f_logCell(3, 0, "", SUB)
         if nlog > 0
             for i = 0 to nlog - 1
-                table.cell(logT, 0, i + 1, array.get(logs, i), text_color = SUB, text_size = size.tiny, bgcolor = BG, text_halign = text.align_left)
+                array<string> p = str.split(array.get(logs, i), "|")
+                string code = array.get(p, 0)
+                f_logCell(0, i + 1, code, code == "UP" ? LUP : code == "DOWN" ? LDN : TXT)
+                f_logCell(1, i + 1, array.get(p, 1), SUB)
+                f_logCell(2, i + 1, array.get(p, 2), TXT)
+                f_logCell(3, i + 1, array.get(p, 3), SUB)
 
 // ─────────────────────────────────────────────────────────────
 // 면책

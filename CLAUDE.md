@@ -45,6 +45,6 @@ node seam/demo/build.mjs
 ## Pine 작업 메모
 
 - Pine v6. 함수 안에서 전역 변수에 `:=` 대입 불가 (배열 · 객체 필드 변경은 가능). 전역 변수는 쓰기 전에 선언되어 있어야 합니다.
-- 오프라인 엔진은 TradingView 컴파일러가 아닙니다. 두 엔진 모두 통과해도 TradingView 에서 "차트에 추가" 로 최종 확인이 필요합니다.
+- 오프라인 엔진은 TradingView 컴파일러가 아닙니다. 두 엔진 모두 통과해도 TradingView 에서 "차트에 추가" 로 최종 확인이 필요합니다. 확인하면 `seam/tests/cases.md` 0절에 날짜 · 종목 · 결과를 한 줄 남깁니다.
 - 알림 페이로드 필드를 바꾸면 `seam/relay/src/schema.ts` 도 같이 바꾸고, `engine.test.mjs` 의 contract 시험이 통과해야 합니다.
 - 합성 시나리오는 스윙을 선 위에 두기 때문에 잡음으로 첫 lock 이 가짜 돌파할 수 있습니다. 시험은 "같은 키의 어떤 lock 이 고전 방향 돌파를 내는가" 로 봅니다.
