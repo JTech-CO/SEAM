@@ -62,6 +62,21 @@ for (const f of fs.readdirSync(REAL).filter((x) => x.endsWith('.tv.json'))) {
     const r = compare(await runReplay(real, expected.inputs), expected, real.mintick);
     assert.ok(r.ok, JSON.stringify({ mismatched: r.rows.filter((x) => x.status !== 'match'), extra: r.extra }, null, 1));
   });
+
+  // Start-point shift (seam/docs/SCANNER.md 3.5): dropping older history must not change what the log shows,
+  // as long as some warm-up remains before the first logged event.
+  test(`parity survives a later start: ${f}`, { skip: have ? false : 'klines not committed yet' }, async () => {
+    const expected = JSON.parse(fs.readFileSync(path.join(REAL, f), 'utf8'));
+    const real = JSON.parse(fs.readFileSync(kl, 'utf8'));
+    const first = Math.min(...expected.events.map((e) => Date.parse(e.at)));
+    const iFirst = real.bars.findIndex((b) => b[0] >= first);
+    for (const warm of [300, 1000, 2000]) {
+      if (iFirst - warm <= 0) continue;
+      const cut = { ...real, bars: real.bars.slice(iFirst - warm) };
+      const r = compare(await runReplay(cut, expected.inputs), expected, real.mintick);
+      assert.ok(r.ok, `warm-up ${warm}: ${JSON.stringify({ mismatched: r.rows.filter((x) => x.status !== 'match'), extra: r.extra })}`);
+    }
+  });
 }
 
 test('replay CLI: --klines + --expect exits 0 on a match, 1 on a mismatch', async () => {
