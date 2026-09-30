@@ -1,0 +1,18 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:BTCUSDT 1분, 2026-09-28 13:54 한국시간 (seam/tests/cases.md 0절 둘째 줄)",
+  "symbol": "BINANCE:BTCUSDT",
+  "tf": "1",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-09-28T13:54:00+09:00",
+  "events": [
+    { "code": "LOCK", "at": "2026-09-28T12:23:00+09:00", "key": "TRI_DESC", "px": [83496.80, 83378.29] },
+    { "code": "DOWN", "at": "2026-09-28T12:25:00+09:00", "key": "TRI_DESC", "px": [83377.35] },
+    { "code": "RETEST", "at": "2026-09-28T12:26:00+09:00", "key": "TRI_DESC", "px": [83333.21] },
+    { "code": "FAIL", "at": "2026-09-28T12:42:00+09:00", "key": "TRI_DESC", "px": [83472.02] },
+    { "code": "LOCK", "at": "2026-09-28T12:54:00+09:00", "key": "CUP_HANDLE", "px": [83488.01, 83368.01] },
+    { "code": "DOWN", "at": "2026-09-28T12:57:00+09:00", "key": "CUP_HANDLE", "px": [83368.01] },
+    { "code": "FAIL", "at": "2026-09-28T13:18:00+09:00", "key": "CUP_HANDLE", "px": [83494.01] },
+    { "code": "LOCK", "at": "2026-09-28T13:39:00+09:00", "key": "CUP_HANDLE", "px": [83516.01, 83435.70] }
+  ]
+}

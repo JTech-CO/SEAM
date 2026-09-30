@@ -37,6 +37,8 @@ npm test
 | confirm-on-close | 봉 중간 돌파는 알림 없음(미리보기 켠 경우 `preview:true` 1회), 종가 확정 봉에서만 `break_up` |
 | noise | 랜덤워크에서 formal lock 빈도가 과하지 않음 |
 | presets | `presets.json.md` 와 Pine 2절 프리셋이 같음 |
+| replay | 저장한 봉으로 돌린 결과와 옮겨 적은 로그의 대조 (가격 · 누락 · 추가) |
+| parity | `seam/tests/real/` 의 TradingView 로그와 같은 봉으로 돌린 결과가 일치 (봉 파일이 있을 때만) |
 
 ## 2. 스펙 11절 체크리스트
 
@@ -71,6 +73,7 @@ npm test
 
 작성 방법
 
+0. (선택) 후보 찾기: `seam/tests/engine/replay.mjs` 로 Binance 봉에서 formal 잠금을 뽑습니다 (`seam/tests/real/README.md`). 후보는 출발점일 뿐이고, 아래 1~3을 TradingView 에서 해야 한 줄이 됩니다.
 1. TradingView 에서 `SEAM Patterns` 를 차트에 추가, 민감도 `normal`, 표시 개수 1.
 2. 확정 로그(차트 오른쪽 아래)나 잠금 다이아몬드 툴팁에서 `LOCK #번호`, 상/하 잠금가를 읽습니다.
 3. Bar Replay 로 잠금 봉 이전부터 다시 재생해 **같은 봉에서 같은 값으로 잠기는지** 확인합니다.
