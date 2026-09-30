@@ -73,10 +73,10 @@ npm test
 
 작성 방법
 
-0. (선택) 후보 찾기: `seam/tests/engine/replay.mjs` 로 Binance 봉에서 formal 잠금을 뽑습니다 (`seam/tests/real/README.md`). 후보는 출발점일 뿐이고, 아래 1~3을 TradingView 에서 해야 한 줄이 됩니다.
+0. (선택) 후보 찾기: `seam/tests/engine/candidates.mjs` 가 Binance 봉에서 키마다 formal 잠금 후보를 뽑습니다. 최신 목록은 [`real/candidates.md`](real/candidates.md). 후보는 출발점일 뿐이고, 아래 1~3을 TradingView 에서 해야 한 줄이 됩니다.
 1. TradingView 에서 `SEAM Patterns` 를 차트에 추가, 민감도 `normal`, 표시 개수 1.
 2. 확정 로그(차트 오른쪽 아래)나 잠금 다이아몬드 툴팁에서 `LOCK #번호`, 상/하 잠금가를 읽습니다.
-3. Bar Replay 로 잠금 봉 이전부터 다시 재생해 **같은 봉에서 같은 값으로 잠기는지** 확인합니다.
+3. Bar Replay 로 잠금 봉 이전부터 다시 재생해 **같은 봉에서 같은 값으로 잠기는지** 확인합니다. 무료 요금제는 바 리플레이가 일봉 이상만 되므로, 1시간 · 4시간은 "TradingView 잠금가 = 엔진 잠금가(후보 표)" 로 대신하고 `재생 동일` 칸에 `엔진 일치` 라고 적습니다.
 4. 아래 표에 채웁니다. 기대값은 재생 전에 눈으로 그린 선의 대략치입니다.
 
 | key | 종목 | TF | 구간 (시작 ~ 잠금 봉) | 기대 잠금 상 / 하 | 실제 잠금 상 / 하 | 등급 | 이후 이벤트 | 재생 동일 | 메모 |
