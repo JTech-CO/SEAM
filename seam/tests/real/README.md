@@ -6,6 +6,7 @@ TradingView 에서 본 확정 로그를 옮겨 적은 파일(`*.tv.json`)과, �
 | 파일 | 내용 |
 |---|---|
 | `btcusdt-1m-2026-09-28.tv.json` | BINANCE:BTCUSDT 1분, 2026-09-28 12:23~13:54 한국시간 확정 로그 8줄 (스크린샷에서 옮김) |
+| `candidates.md` | 사례 후보 목록 (TradingView 확인 전). `candidates.mjs` 로 다시 만듦 |
 | `btcusdt-1m-2026-09-28.klines.json` | 같은 구간 Binance 1분 봉 3092개 (로그 첫 줄 3000봉 전부터). 2026-09-30 대조 8/8 일치 |
 
 ## 대조 실행 (인터넷 되는 PC, Node 22.18+)
@@ -25,10 +26,13 @@ node replay.mjs --expect ../real/btcusdt-1m-2026-09-28.tv.json --save ../real/bt
 ## 후보 찾기 (cases.md 3절)
 
 ```bash
+# 여러 종목 · TF 에서 키마다 최신 3개 → candidates.md
+node candidates.mjs BINANCE:BTCUSDT@60 BINANCE:ETHUSDT@60 BINANCE:BTCUSDT@240 BINANCE:ETHUSDT@240 --out ../real/candidates.md
+# 한 종목 · 구간의 이벤트 전체
 node replay.mjs --symbol BINANCE:ETHUSDT --tf 60 --from 2026-09-01T00:00+09:00 --to 2026-09-30T00:00+09:00
 ```
 
-출력되는 `LOCK` 줄이 후보입니다. TradingView 에서 그 시각으로 가서 같은 잠금이 보이는지, 선이 가격에 제대로 붙었는지 확인한 뒤 `cases.md` 3절에 적습니다. 오프라인 결과만으로 표를 채우지 않습니다.
+`candidates.md` 의 줄, `replay.mjs` 출력의 `LOCK` 줄이 후보입니다. TradingView 에서 그 시각으로 가서 같은 잠금이 보이는지, 선이 가격에 제대로 붙었는지 확인한 뒤 `cases.md` 3절에 적습니다. 오프라인 결과만으로 표를 채우지 않습니다.
 
 ## 새 대조 자료 추가
 

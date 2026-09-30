@@ -22,6 +22,7 @@ seam/relay/                    TypeScript 웹훅 → 텔레그램 릴레이 (런
 seam/docs/                     PRINCIPLES · PATTERNS · DISCLAIMER · SCANNER (v1.1 설계)
 seam/tests/engine/             오프라인 Pine 엔진(piner, resin)으로 지표를 돌리는 회귀 시험
 seam/tests/engine/replay.mjs   거래소 봉으로 지표를 돌려 확정 로그 형식으로 출력 · TradingView 로그와 대조
+seam/tests/engine/candidates.mjs  여러 종목 · TF 에서 키마다 사례 후보를 뽑아 tests/real/candidates.md 로
 seam/tests/real/               TradingView 로그 옮긴 파일(*.tv.json) + 같은 구간 봉(*.klines.json)
 seam/tests/cases.md            실차트 수동 사례 + 스펙 11절 체크리스트
 seam/tests/check-brand.mjs     금지 명칭 · 주문형 문구 검사
