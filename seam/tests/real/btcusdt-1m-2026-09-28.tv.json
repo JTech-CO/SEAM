@@ -1,5 +1,6 @@
 {
   "source": "TradingView 확정 로그 스크린샷, BINANCE:BTCUSDT 1분, 2026-09-28 13:54 한국시간 (seam/tests/cases.md 0절 둘째 줄)",
+  "pine": "PR #3 이후 SEAM_Patterns.pine (이 로그를 찍은 코드)",
   "symbol": "BINANCE:BTCUSDT",
   "tf": "1",
   "tz": "Asia/Seoul",

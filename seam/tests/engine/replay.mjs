@@ -32,7 +32,7 @@ async function getJson(path) {
     try {
       const res = await fetch(host + path, { signal: AbortSignal.timeout(15000) });
       if (res.ok) return await res.json();
-      errors.push(`${host} ${res.status}`);
+      errors.push(`${host} ${res.status} ${(await res.text()).replace(/\s+/g, ' ').slice(0, 90)}`);
     } catch (e) {
       errors.push(`${host} ${e.cause?.code ?? e.message}`);
     }
