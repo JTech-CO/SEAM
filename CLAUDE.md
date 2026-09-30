@@ -19,8 +19,10 @@ SEAM Pattern Engine: TradingView 패턴 작도 + 봉마감 확정 + 텔레그램
 seam/pine/SEAM_Patterns.pine   Pine v6 지표 (엔진 전부)
 seam/pine/presets.json.md      민감도 프리셋 표 (Pine 2절과 동일해야 함)
 seam/relay/                    TypeScript 웹훅 → 텔레그램 릴레이 (런타임 의존성 0)
-seam/docs/                     PRINCIPLES · PATTERNS · DISCLAIMER
+seam/docs/                     PRINCIPLES · PATTERNS · DISCLAIMER · SCANNER (v1.1 설계)
 seam/tests/engine/             오프라인 Pine 엔진(piner, resin)으로 지표를 돌리는 회귀 시험
+seam/tests/engine/replay.mjs   거래소 봉으로 지표를 돌려 확정 로그 형식으로 출력 · TradingView 로그와 대조
+seam/tests/real/               TradingView 로그 옮긴 파일(*.tv.json) + 같은 구간 봉(*.klines.json)
 seam/tests/cases.md            실차트 수동 사례 + 스펙 11절 체크리스트
 seam/tests/check-brand.mjs     금지 명칭 · 주문형 문구 검사
 seam/demo/                     GitHub Pages 데모: build.mjs 가 지표를 봉마다 돌려 site/data.js 생성, site/ 는 뷰어
@@ -37,6 +39,9 @@ cd seam/tests/engine && npm ci && npm test
 
 # 브랜드 검사
 node seam/tests/check-brand.mjs
+
+# 실차트 대조 (인터넷 필요, seam/tests/real/README.md)
+cd seam/tests/engine && node replay.mjs --expect ../real/btcusdt-1m-2026-09-28.tv.json --save ../real/btcusdt-1m-2026-09-28.klines.json
 
 # 데모 데이터 (엔진 시험 의존성 설치 후)
 node seam/demo/build.mjs

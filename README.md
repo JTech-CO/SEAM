@@ -41,7 +41,7 @@ TradingView 패턴 작도 + 봉마감 확정 + 텔레그램 알림. 주식 · �
 | `SEAM-pattern-engine-spec.md` | 개발 브리프 (스펙) |
 | `seam/pine/` | 지표 · 프리셋 표 |
 | `seam/relay/` | TradingView → 텔레그램 릴레이 (TypeScript, 런타임 의존성 0) |
-| `seam/docs/` | [원칙](seam/docs/PRINCIPLES.md) · [패턴](seam/docs/PATTERNS.md) · [면책](seam/docs/DISCLAIMER.md) |
+| `seam/docs/` | [원칙](seam/docs/PRINCIPLES.md) · [패턴](seam/docs/PATTERNS.md) · [면책](seam/docs/DISCLAIMER.md) · [스캐너 설계 (v1.1)](seam/docs/SCANNER.md) |
 | `seam/tests/` | 오프라인 엔진 회귀 시험 · 실차트 사례 · 브랜드 검사 ([cases.md](seam/tests/cases.md)) |
 | `seam/demo/` | GitHub Pages 정적 데모 (빌드 스크립트 + 뷰어) |
 | `CLAUDE.md` | 에이전트 작업 규칙 |
