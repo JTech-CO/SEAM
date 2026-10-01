@@ -1,0 +1,19 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:ETHUSDT 1시간, 2026-10-01 18:12 한국시간 (후보 22 · 37 확인)",
+  "pine": "PR #3 이후 SEAM_Patterns.pine (이 로그를 찍은 코드)",
+  "symbol": "BINANCE:ETHUSDT",
+  "tf": "60",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-10-01T17:00:00+09:00",
+  "events": [
+    { "code": "DOWN", "at": "2026-09-27T05:00:00+09:00", "key": "FLAG_BEAR", "px": [2681.26] },
+    { "code": "LOCK", "at": "2026-09-27T08:00:00+09:00", "key": "FLAG_BEAR", "px": [2700.68, 2688.75] },
+    { "code": "FAIL", "at": "2026-09-27T10:00:00+09:00", "key": "FLAG_BEAR", "px": [2701.55] },
+    { "code": "UP", "at": "2026-09-27T14:00:00+09:00", "key": "FLAG_BEAR", "px": [2701.84] },
+    { "code": "FAIL", "at": "2026-09-27T23:00:00+09:00", "key": "FLAG_BEAR", "px": [2688.26] },
+    { "code": "LOCK", "at": "2026-09-30T06:00:00+09:00", "key": "CHANNEL_UP", "px": [2759.87, 2673.07] },
+    { "code": "DOWN", "at": "2026-09-30T09:00:00+09:00", "key": "CHANNEL_UP", "px": [2675.88] },
+    { "code": "RETEST", "at": "2026-09-30T10:00:00+09:00", "key": "CHANNEL_UP", "px": [2672.57] }
+  ]
+}
