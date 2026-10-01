@@ -102,7 +102,7 @@ npm test
 | PENNANT_BEAR |  |  |  |  |  |  |  |  |  |
 | PENNANT_BEAR |  |  |  |  |  |  |  |  |  |
 | PENNANT_BEAR |  |  |  |  |  |  |  |  |  |
-| CHANNEL_UP |  |  |  |  |  |  |  |  |  |
+| CHANNEL_UP | BINANCE:ETHUSDT | 1H | 26-09-28 09:00 ~ 26-09-30 06:00 | 2759.87 / 2673.07 (엔진 후보 22) | 2759.87 / 2673.07 | formal | DOWN 09-30 09:00 → RETEST 10:00 | 엔진 일치 | 툴팁 · 로그 값 일치, 선 밀착 양호 (2026-10-01 확인) |
 | CHANNEL_UP |  |  |  |  |  |  |  |  |  |
 | CHANNEL_UP |  |  |  |  |  |  |  |  |  |
 | CHANNEL_DN |  |  |  |  |  |  |  |  |  |
@@ -117,7 +117,7 @@ npm test
 | FLAG_BULL |  |  |  |  |  |  |  |  |  |
 | FLAG_BULL |  |  |  |  |  |  |  |  |  |
 | FLAG_BULL |  |  |  |  |  |  |  |  |  |
-| FLAG_BEAR |  |  |  |  |  |  |  |  |  |
+| FLAG_BEAR | BINANCE:ETHUSDT | 1H | 26-09-26 10:00 ~ 26-09-27 08:00 | 2700.68 / 2688.75 (엔진 후보 37) | 2700.68 / 2688.75 | formal | UP 09-27 14:00 → FAIL 23:00 | 엔진 일치 | 로그 값 일치, 후보 22 와 같은 스크린샷에서 선 확인 (2026-10-01) |
 | FLAG_BEAR |  |  |  |  |  |  |  |  |  |
 | FLAG_BEAR |  |  |  |  |  |  |  |  |  |
 | DOUBLE_BOTTOM |  |  |  |  |  |  |  |  |  |
