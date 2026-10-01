@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 // Case candidates for seam/tests/cases.md §3: runs the indicator on recent Binance candles for several
-// symbol@tf series and lists up to --per formal structures per pattern key, newest first, spread across series.
+// SYMBOL@TF[@SINCE] series and lists, per pattern key, as many formal structures as cases.md still needs
+// (--per minus the rows already recorded), newest first, spread across series. Structures already recorded
+// are skipped. SINCE (ISO time) keeps locks inside what the TradingView plan can still show.
 // Candidates are only a starting point: each one is confirmed on TradingView before it goes into cases.md.
 //
-//   node candidates.mjs BINANCE:BTCUSDT@60 BINANCE:ETHUSDT@60 BINANCE:BTCUSDT@240 BINANCE:ETHUSDT@240 --out ../real/candidates.md
+//   node candidates.mjs BINANCE:BTCUSDT@60@2026-08-20T05:00+09:00 BINANCE:ETHUSDT@60@2026-08-20T05:00+09:00 --out ../real/candidates.md
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { KEYS } from '../../relay/src/schema.ts';
 import { KEY_NAMES, formatTf } from '../../relay/src/format.ts';
-import { digitsOf, fetchCandles, runReplay } from './replay.mjs';
+import { digitsOf, fetchCandles, runReplay, tickWarning } from './replay.mjs';
+
+const CASES = new URL('../cases.md', import.meta.url);
 
 const STEP = { 1: 60e3, 5: 300e3, 15: 900e3, 60: 3600e3, 240: 14400e3, D: 86400e3 };
 const TZ = 'Asia/Seoul';
@@ -19,6 +23,14 @@ function fmt(ms, withYear) {
       .formatToParts(new Date(ms)).map((x) => [x.type, x.value]),
   );
   return `${withYear ? `${p.year}-` : ''}${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+
+// Rows already filled in cases.md §3: "| KEY | BINANCE:SYM | 1H | start ~ lock | ...".
+function recorded() {
+  const rows = fs.readFileSync(CASES, 'utf8').split('\n').map((l) => l.split('|').map((c) => c.trim()));
+  return rows
+    .filter((c) => KEYS.includes(c[1]) && c[2])
+    .map((c) => ({ key: c[1], symbol: c[2], tf: c[3], lock: (c[4].split('~')[1] ?? '').trim() }));
 }
 
 // Newest first, but take one per series before taking a second from any series.
@@ -43,10 +55,18 @@ async function main() {
   const inputs = { 민감도: o.sens, '표시 개수': 1 };
   const found = [];
   const series = [];
+  const done = recorded();
+  const isDone = (s) => done.some((d) => d.key === s.key && d.symbol === s.symbol && d.tf === formatTf(s.tf) && d.lock === fmt(s.lockMs, true));
   for (const arg of positionals) {
-    const [symbol, tf] = arg.split('@');
+    const [symbol, tf, since] = arg.split('@');
+    if (since && Number.isNaN(Date.parse(since))) throw new Error(`bad SINCE in ${arg}`);
     if (!STEP[tf]) throw new Error(`unsupported tf in ${arg}`);
     const c = await fetchCandles({ symbol, tf, startMs: Date.now() - Number(o.bars) * STEP[tf], endMs: Date.now() });
+    if (tickWarning(c.mintick)) {
+      // TradingView shows the true tick, the engine prints 0.01 steps: the lock prices could not be compared.
+      series.push(`${c.symbol} ${formatTf(c.tf)} · 제외 — ${tickWarning(c.mintick)}`);
+      continue;
+    }
     const events = await runReplay(c, inputs);
     const warmEnd = c.bars[Math.min(Number(o.warm), c.bars.length - 1)][0];
     const byId = new Map();
@@ -55,8 +75,9 @@ async function main() {
       if (!byId.has(id)) byId.set(id, { series: arg, symbol: c.symbol, tf: c.tf, key: e.key, lockMs: e.lockMs, digits: digitsOf(c.mintick), events: [] });
       byId.get(id).events.push(e);
     }
-    const list = [...byId.values()].filter((s) => s.events[0].code === 'LOCK' && s.lockMs >= warmEnd);
-    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)} · 구조 ${list.length}`);
+    const from = Math.max(warmEnd, since ? Date.parse(since) : -Infinity);
+    const list = [...byId.values()].filter((s) => s.events[0].code === 'LOCK' && s.lockMs >= from && !isDone(s));
+    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)}${since ? ` · 잠금 ${fmt(Date.parse(since), true)} 이후만` : ''} · 미기록 구조 ${list.length}`);
     found.push(...list);
   }
   found.sort((a, b) => b.lockMs - a.lockMs);
@@ -67,21 +88,24 @@ async function main() {
   let n = 0;
   for (const key of KEYS) {
     const all = found.filter((s) => s.key === key);
-    counts.push(`| \`${key}\` ${KEY_NAMES[key]} | ${all.length} |`);
-    for (const s of pick(all, per)) {
+    const have = done.filter((d) => d.key === key).length;
+    const need = Math.max(0, per - have);
+    counts.push(`| \`${key}\` ${KEY_NAMES[key]} | ${have} | ${need} | ${all.length} |`);
+    for (const s of pick(all, need)) {
       const [lock, ...after] = s.events;
       const px = (v) => v.toFixed(s.digits);
-      const chain = after.length ? after.map((e) => `${e.code} ${fmt(e.barMs, false)}`).join(' → ') : '추적 중';
+      const chain = after.length ? after.map((e) => `${e.code} ${fmt(e.barMs, false)}`).join(' → ') : '이후 이벤트 없음 (추적 중이거나 더 나은 구조로 교체됨)';
       lines.push(`| ${++n} | \`${key}\` | ${s.symbol.split(':')[1]} ${formatTf(s.tf)} | ${fmt(s.lockMs, true)} | ${px(lock.px[0])} / ${px(lock.px[1])} | ${chain} | |`);
     }
-    if (all.length < per) lines.push(`|  | \`${key}\` | 후보 ${all.length}개뿐 — 종목 · 기간을 늘려 다시 찾기 |  |  |  |  |`);
+    if (all.length < need) lines.push(`|  | \`${key}\` | 후보 ${all.length}개뿐 (필요 ${need}) — 종목 · TF 를 늘려 다시 찾기 |  |  |  |  |`);
   }
 
   const md = `# 사례 후보 (TradingView 확인 전)
 
 오프라인 엔진이 Binance 봉에서 찾은 formal 구조입니다. **아직 사례가 아닙니다.** TradingView 에서 확인한 것만 \`cases.md\` 3절에 옮깁니다.
 
-- 만든 날: ${fmt(Date.now(), true)} 한국시간 · 민감도 \`${o.sens}\` · 표시 개수 1 · 키마다 최신순 ${per}개 (종목 · TF 를 섞어서)
+- 만든 날: ${fmt(Date.now(), true)} 한국시간 · 민감도 \`${o.sens}\` · 표시 개수 1
+- 기록된 사례 ${done.length} / ${KEYS.length * per} · 키마다 \`cases.md\` 에 남은 칸만큼, 최신순으로 종목 · TF 를 섞어서 골랐습니다. 이미 기록한 구조는 뺐습니다.
 - 명령: \`node candidates.mjs ${positionals.join(' ')}\` (seam/tests/engine, 인터넷 필요)
 - 시각은 한국시간, 봉 시작 시각입니다. 차트 시간대를 UTC+9 로 두면 그대로 찾을 수 있습니다.
 
@@ -102,12 +126,12 @@ ${series.map((s) => `- ${s}`).join('\n')}
 |---|---|---|---|---|---|---|
 ${lines.join('\n')}
 
-## 키별로 찾은 수
+## 키별 현황
 
-한쪽으로 몰리거나 거의 안 나오는 키는 프리셋 조정 후보입니다 (사례 확인 뒤 판단).
+\`미기록 구조\` 는 위 구간에서 엔진이 찾은 formal 구조 중 아직 기록하지 않은 수입니다. 한쪽으로 몰리거나 거의 안 나오는 키는 프리셋 조정 후보입니다 (사례 확인 뒤 판단).
 
-| 키 | 구조 수 |
-|---|---|
+| 키 | 기록 | 남은 칸 | 미기록 구조 |
+|---|---|---|---|
 ${counts.join('\n')}
 `;
   if (o.out) fs.writeFileSync(o.out, md);

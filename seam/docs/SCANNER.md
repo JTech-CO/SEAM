@@ -40,6 +40,10 @@
   - 대조 자료는 사례 수집과 함께 계속 늘려 갑니다 (4절 2번).
   - 차이가 엔진 쪽 문제로 밝혀지면, 그 부분만 Pine 에서 피해 가도록 고칩니다.
   - 그래도 안 맞으면 마지막 수단으로 TypeScript 포팅과 대조 시험을 함께 둡니다.
+- **알려진 차이 (2026-10-01 발견)**: piner 는 `syminfo.mintick` 은 맞게 읽지만 `math.round_to_mintick` · `format.mintick` 은 항상 0.01 단위로 반올림합니다.
+  - 판정 로직은 이 함수들을 쓰지 않으므로 구조 · 이벤트는 같습니다. 틀어지는 것은 알림 JSON 의 가격(`f_num`)과 로그 · 툴팁 문자열뿐입니다.
+  - 호가 단위가 0.01 이상인 종목(BTC · ETH · SOL · BNB · LTC · BCH 등)은 영향이 없습니다. XRP · AVAX · LINK 같은 종목은 가격이 0.01 단위로 뭉개집니다.
+  - S2 에서 `f_num` 의 `math.round_to_mintick(v)` 를 `math.round(v / syminfo.mintick) * syminfo.mintick` 로 바꿉니다. TradingView 에서는 결과가 같고 piner 에서도 맞게 나옵니다. 그 전까지 호가 단위 0.01 미만 종목은 스캐너 · 후보 대상에서 뺍니다.
 - **라이선스**: piner 는 AGPL-3.0, SEAM 은 MIT 입니다.
   - 지금 piner 는 시험용 개발 의존성입니다. 스캐너 실행에 쓰면 실행 의존성이 됩니다.
   - 본인 PC 에서 본인이 쓰는 것은 문제가 없습니다.

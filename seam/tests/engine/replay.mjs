@@ -24,6 +24,15 @@ const TF = {
 };
 // Market-data-only host first: api.binance.com answers 451 from some regions (US cloud runners).
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
+// piner reads syminfo.mintick correctly but math.round_to_mintick / format.mintick always round to 0.01.
+// Detection does not use them (only the JSON / tooltip / log text does), so below 0.01 the structures are
+// the same as TradingView but the printed prices are rounded. seam/docs/SCANNER.md 3.1 has the fix plan.
+export const ENGINE_PRICE_STEP = 0.01;
+export function tickWarning(mintick) {
+  return mintick < ENGINE_PRICE_STEP - 1e-12
+    ? `호가 단위 ${mintick} < ${ENGINE_PRICE_STEP}: 오프라인 엔진이 출력 가격을 ${ENGINE_PRICE_STEP} 단위로 반올림합니다 (구조 판정은 같음, 가격 비교는 불가)`
+    : '';
+}
 const CODE = { lock: 'LOCK', break_up: 'UP', break_down: 'DOWN', retest: 'RETEST', fail: 'FAIL', expire: 'EXPIRE' };
 
 async function getJson(path) {
@@ -159,6 +168,7 @@ async function main() {
   const bars = candles.bars;
 
   console.log(`${candles.symbol} · ${candles.tf} · ${bars.length} closed bars ${formatTime(bars[0][0], tz, candles.tf)} ~ ${formatTime(bars.at(-1)[0], tz, candles.tf)} (${tz}) · ${ms} ms`);
+  if (tickWarning(candles.mintick)) console.log(`주의: ${tickWarning(candles.mintick)}`);
   console.log(`inputs: ${JSON.stringify(inputs)}\n`);
   const line = (e) => `${e.code.padEnd(7)} ${formatTime(e.barMs, tz, candles.tf)}  ${e.key.padEnd(14)} ${pxText(e, digits)}`;
   for (const e of events) if (e.barMs >= fromMs && e.barMs <= toMs) console.log(line(e));

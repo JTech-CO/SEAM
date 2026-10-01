@@ -28,11 +28,14 @@ node replay.mjs --expect ../real/btcusdt-1m-2026-09-28.tv.json --save ../real/bt
 ## 후보 찾기 (cases.md 3절)
 
 ```bash
-# 여러 종목 · TF 에서 키마다 최신 3개 → candidates.md
-node candidates.mjs BINANCE:BTCUSDT@60 BINANCE:ETHUSDT@60 BINANCE:BTCUSDT@240 BINANCE:ETHUSDT@240 --out ../real/candidates.md
+# 여러 종목 · TF 에서 cases.md 에 남은 칸만큼 → candidates.md (@SINCE: TradingView 에서 볼 수 있는 첫 봉)
+W=2026-08-20T05:00+09:00
+node candidates.mjs BINANCE:BTCUSDT@60@$W BINANCE:ETHUSDT@60@$W BINANCE:SOLUSDT@60@$W BINANCE:BNBUSDT@60@$W BINANCE:LTCUSDT@60@$W BINANCE:BCHUSDT@60@$W --out ../real/candidates.md
 # 한 종목 · 구간의 이벤트 전체
 node replay.mjs --symbol BINANCE:ETHUSDT --tf 60 --from 2026-09-01T00:00+09:00 --to 2026-09-30T00:00+09:00
 ```
+
+`cases.md` 에 이미 기록한 구조는 자동으로 빠집니다. 호가 단위가 0.01 보다 작은 종목은 `제외` 로 표시됩니다 (`SCANNER.md` 3.1).
 
 `candidates.md` 의 줄, `replay.mjs` 출력의 `LOCK` 줄이 후보입니다. TradingView 에서 그 시각으로 가서 같은 잠금이 보이는지, 선이 가격에 제대로 붙었는지 확인한 뒤 `cases.md` 3절에 적습니다. 오프라인 결과만으로 표를 채우지 않습니다.
 
