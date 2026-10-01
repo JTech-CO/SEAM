@@ -2,10 +2,12 @@
 // Case candidates for seam/tests/cases.md §3: runs the indicator on recent Binance candles for several
 // SYMBOL@TF[@SINCE] series and lists, per pattern key, as many formal structures as cases.md still needs
 // (--per minus the rows already recorded), newest first, spread across series. Structures already recorded
-// are skipped. SINCE (ISO time) keeps locks inside what the TradingView plan can still show.
+// are skipped. SINCE (ISO time) is the first bar the TradingView plan loads: the run starts exactly there,
+// like the indicator on that chart, so even a short window (4h on the free plan) matches bar for bar.
+// Without SINCE the run uses --bars of history and skips the first --warm bars.
 // Candidates are only a starting point: each one is confirmed on TradingView before it goes into cases.md.
 //
-//   node candidates.mjs BINANCE:BTCUSDT@60@2026-08-20T05:00+09:00 BINANCE:ETHUSDT@60@2026-08-20T05:00+09:00 --out ../real/candidates.md
+//   node candidates.mjs BINANCE:BTCUSDT@60@2026-08-20T05:00+09:00 BINANCE:BTCUSDT@240@2026-08-20T05:00+09:00 BINANCE:BTCUSDT@D --out ../real/candidates.md
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { KEYS } from '../../relay/src/schema.ts';
@@ -61,14 +63,15 @@ async function main() {
     const [symbol, tf, since] = arg.split('@');
     if (since && Number.isNaN(Date.parse(since))) throw new Error(`bad SINCE in ${arg}`);
     if (!STEP[tf]) throw new Error(`unsupported tf in ${arg}`);
-    const c = await fetchCandles({ symbol, tf, startMs: Date.now() - Number(o.bars) * STEP[tf], endMs: Date.now() });
+    const startMs = since ? Date.parse(since) : Date.now() - Number(o.bars) * STEP[tf];
+    const c = await fetchCandles({ symbol, tf, startMs, endMs: Date.now() });
     if (tickWarning(c.mintick)) {
       // TradingView shows the true tick, the engine prints 0.01 steps: the lock prices could not be compared.
       series.push(`${c.symbol} ${formatTf(c.tf)} · 제외 — ${tickWarning(c.mintick)}`);
       continue;
     }
     const events = await runReplay(c, inputs);
-    const warmEnd = c.bars[Math.min(Number(o.warm), c.bars.length - 1)][0];
+    const warmEnd = since ? c.bars[0][0] : c.bars[Math.min(Number(o.warm), c.bars.length - 1)][0];
     const byId = new Map();
     for (const e of events) {
       const id = `${e.key}|${e.lockMs}`;
@@ -77,7 +80,7 @@ async function main() {
     }
     const from = Math.max(warmEnd, since ? Date.parse(since) : -Infinity);
     const list = [...byId.values()].filter((s) => s.events[0].code === 'LOCK' && s.lockMs >= from && !isDone(s));
-    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)}${since ? ` · 잠금 ${fmt(Date.parse(since), true)} 이후만` : ''} · 미기록 구조 ${list.length}`);
+    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)}${since ? ' · TradingView 와 같은 첫 봉에서 시작' : ` · 앞 ${o.warm}봉은 워밍업으로 제외`} · 미기록 구조 ${list.length}`);
     found.push(...list);
   }
   found.sort((a, b) => b.lockMs - a.lockMs);
@@ -118,7 +121,7 @@ ${series.map((s) => `- ${s}`).join('\n')}
 3. 선이 가격에 제대로 붙었는지(접점 · 밀착) 눈으로 판단합니다.
 4. 확인 칸에 \`OK\` / \`NG\` 와 한 줄 메모를 적어 알려 주시면 \`cases.md\` 3절로 옮깁니다. 스크린샷이 있으면 더 좋습니다.
 
-무료 요금제의 바 리플레이는 일봉 이상만 됩니다. 1시간 · 4시간 후보는 리플레이 대신 "TradingView 잠금가 = 엔진 잠금가" 로 같은 봉 · 같은 값을 확인합니다 (과거 선은 다시 그려지지 않고, 엔진 대조는 \`seam/tests/real\` 시험이 확인).
+무료 요금제의 바 리플레이는 일봉 이상만 됩니다. 1시간 · 4시간 후보는 리플레이 대신 "TradingView 잠금가 = 엔진 잠금가" 로 같은 봉 · 같은 값을 확인합니다 (과거 선은 다시 그려지지 않고, 엔진 대조는 \`seam/tests/real\` 시험이 확인). 일봉 후보는 바 리플레이로 잠금 봉 전부터 재생해 같은 봉 · 같은 값으로 잠기는지까지 볼 수 있습니다.
 
 ## 후보
 
