@@ -73,7 +73,9 @@ npm test
 
 작성 방법
 
-0. (선택) 후보 찾기: `seam/tests/engine/candidates.mjs` 가 Binance 봉에서 키마다 formal 잠금 후보를 뽑습니다. 최신 목록은 [`real/candidates.md`](real/candidates.md). 후보는 출발점일 뿐이고, 아래 1~3을 TradingView 에서 해야 한 줄이 됩니다.
+0. (선택) 후보 찾기: `seam/tests/engine/candidates.mjs` 가 Binance 봉에서 키마다 남은 칸만큼 formal 잠금 후보를 뽑습니다. 최신 목록은 [`real/candidates.md`](real/candidates.md). 후보는 출발점일 뿐이고, 아래 1~3을 TradingView 에서 해야 한 줄이 됩니다.
+   - 무료 요금제는 과거 봉을 볼 수 있는 범위가 짧습니다 (2026-10-01 기준 1시간봉은 08-20 05:00 이후). 후보는 `SYMBOL@TF@SINCE` 로 그 범위 안에서만 뽑습니다.
+   - 호가 단위가 0.01 보다 작은 종목(XRP · AVAX · LINK 등)은 오프라인 엔진이 출력 가격을 0.01 로 반올림해서 툴팁과 비교할 수 없으므로 후보에서 뺍니다.
 1. TradingView 에서 `SEAM Patterns` 를 차트에 추가, 민감도 `normal`, 표시 개수 1.
 2. 확정 로그(차트 오른쪽 아래)나 잠금 다이아몬드 툴팁에서 `LOCK #번호`, 상/하 잠금가를 읽습니다.
 3. Bar Replay 로 잠금 봉 이전부터 다시 재생해 **같은 봉에서 같은 값으로 잠기는지** 확인합니다. 무료 요금제는 바 리플레이가 일봉 이상만 되므로, 1시간 · 4시간은 "TradingView 잠금가 = 엔진 잠금가(후보 표)" 로 대신하고 `재생 동일` 칸에 `엔진 일치` 라고 적습니다.
@@ -87,16 +89,16 @@ npm test
 | TRI_DESC |  |  |  |  |  |  |  |  |  |
 | TRI_DESC |  |  |  |  |  |  |  |  |  |
 | TRI_DESC |  |  |  |  |  |  |  |  |  |
+| TRI_SYM | BINANCE:ETHUSDT | 1H | 26-09-06 23:00 ~ 26-09-08 03:00 | 2499.93 / 2484.31 (엔진 후보 9) | 2499.93 / 2484.31 | formal | DOWN 09-08 07:00 → FAIL 08:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | TRI_SYM |  |  |  |  |  |  |  |  |  |
 | TRI_SYM |  |  |  |  |  |  |  |  |  |
-| TRI_SYM |  |  |  |  |  |  |  |  |  |
+| WEDGE_RISING | BINANCE:ETHUSDT | 1H | 26-08-23 04:00 ~ 26-08-24 11:00 | 2492.30 / 2435.37 (엔진 후보 11) | 2492.30 / 2435.37 | formal | DOWN 08-24 12:00 → RETEST 13:00 → FAIL 21:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | WEDGE_RISING |  |  |  |  |  |  |  |  |  |
 | WEDGE_RISING |  |  |  |  |  |  |  |  |  |
-| WEDGE_RISING |  |  |  |  |  |  |  |  |  |
+| WEDGE_FALLING | BINANCE:ETHUSDT | 1H | 26-09-07 11:00 ~ 26-09-08 20:00 | 2497.25 / 2460.37 (엔진 후보 13) | 2497.25 / 2460.37 | formal | UP 09-09 00:00 → RETEST 01:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | WEDGE_FALLING |  |  |  |  |  |  |  |  |  |
 | WEDGE_FALLING |  |  |  |  |  |  |  |  |  |
-| WEDGE_FALLING |  |  |  |  |  |  |  |  |  |
-| PENNANT_BULL |  |  |  |  |  |  |  |  |  |
+| PENNANT_BULL | BINANCE:ETHUSDT | 1H | 26-09-12 14:00 ~ 26-09-13 13:00 | 2522.95 / 2519.35 (엔진 후보 17) | 2522.95 / 2519.35 | formal | UP 09-13 14:00 → FAIL 15:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | PENNANT_BULL |  |  |  |  |  |  |  |  |  |
 | PENNANT_BULL |  |  |  |  |  |  |  |  |  |
 | PENNANT_BEAR |  |  |  |  |  |  |  |  |  |
@@ -114,7 +116,7 @@ npm test
 | BOX |  |  |  |  |  |  |  |  |  |
 | BOX |  |  |  |  |  |  |  |  |  |
 | BOX |  |  |  |  |  |  |  |  |  |
-| FLAG_BULL |  |  |  |  |  |  |  |  |  |
+| FLAG_BULL | BINANCE:ETHUSDT | 1H | 26-08-27 14:00 ~ 26-08-28 13:00 | 2535.53 / 2484.04 (엔진 후보 34) | 2535.53 / 2484.04 | formal | DOWN 08-29 00:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | FLAG_BULL |  |  |  |  |  |  |  |  |  |
 | FLAG_BULL |  |  |  |  |  |  |  |  |  |
 | FLAG_BEAR | BINANCE:ETHUSDT | 1H | 26-09-26 10:00 ~ 26-09-27 08:00 | 2700.68 / 2688.75 (엔진 후보 37) | 2700.68 / 2688.75 | formal | UP 09-27 14:00 → FAIL 23:00 | 엔진 일치 | 로그 값 일치, 후보 22 와 같은 스크린샷에서 선 확인 (2026-10-01) |
@@ -126,7 +128,7 @@ npm test
 | DOUBLE_TOP |  |  |  |  |  |  |  |  |  |
 | DOUBLE_TOP |  |  |  |  |  |  |  |  |  |
 | DOUBLE_TOP |  |  |  |  |  |  |  |  |  |
-| CUP_HANDLE |  |  |  |  |  |  |  |  |  |
+| CUP_HANDLE | BINANCE:ETHUSDT | 1H | 26-09-15 05:00 ~ 26-09-19 15:00 | 2646.00 / 2602.94 (엔진 후보 41) | 2646.00 / 2602.94 | formal | UP 09-20 01:00 → RETEST 02:00 → FAIL 11:00 | 엔진 일치 | 툴팁 값 일치 · 선 확인 (ETH 1H 일괄 확인 2026-10-01) |
 | CUP_HANDLE |  |  |  |  |  |  |  |  |  |
 | CUP_HANDLE |  |  |  |  |  |  |  |  |  |
 
