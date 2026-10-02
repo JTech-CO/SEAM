@@ -1,0 +1,18 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:BTCUSDT 1시간, 2026-10-02 14:59 한국시간 (박스 접점 2개 규칙 적용 후 첫 확인). 맨 아래 줄(09-23 10:00 PENNANT_BULL RETEST)은 가격이 아이콘에 가려 뺐습니다",
+  "pine": "PR #13 이후 SEAM_Patterns.pine (BOX 접점 2개)",
+  "symbol": "BINANCE:BTCUSDT",
+  "tf": "60",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-10-02T13:00:00+09:00",
+  "events": [
+    { "code": "LOCK", "at": "2026-09-25T21:00:00+09:00", "key": "WEDGE_RISING", "px": [85035.77, 83949.49] },
+    { "code": "DOWN", "at": "2026-09-25T22:00:00+09:00", "key": "WEDGE_RISING", "px": [83989.29] },
+    { "code": "RETEST", "at": "2026-09-25T23:00:00+09:00", "key": "WEDGE_RISING", "px": [84016.01] },
+    { "code": "LOCK", "at": "2026-09-30T03:00:00+09:00", "key": "TRI_SYM", "px": [84502.01, 83105.03] },
+    { "code": "DOWN", "at": "2026-09-30T13:00:00+09:00", "key": "TRI_SYM", "px": [83298.61] },
+    { "code": "RETEST", "at": "2026-09-30T15:00:00+09:00", "key": "TRI_SYM", "px": [83043.14] },
+    { "code": "FAIL", "at": "2026-09-30T21:00:00+09:00", "key": "TRI_SYM", "px": [85290.32] }
+  ]
+}
