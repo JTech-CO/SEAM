@@ -33,6 +33,20 @@ for (const [key, wp] of Object.entries(scenarios)) {
   });
 }
 
+// Two equal highs and two equal lows already make a box (the horizontal check is the confirmation), so BOX
+// uses the relaxed touch count like flags. Before this rule such a box stayed reference and nothing fired.
+test('BOX: two touches per line is enough — formal lock 2/2, then break_up', async () => {
+  const wp = [[0, 90], [30, 100], [45, 110], [60, 100], [75, 110], [90, 100], [100, 104], [112, 118], [125, 120]];
+  for (const seed of SEEDS) {
+    const { alerts } = await run(makeBars(wp, { seed }));
+    const lock = alerts.find((a) => a.event === 'lock' && a.key === 'BOX');
+    assert.ok(lock, `seed ${seed}: no BOX lock in ${JSON.stringify(alerts.map((a) => `${a.event}:${a.key}`))}`);
+    assert.equal(lock.grade, 'formal');
+    assert.deepEqual(lock.touches, [2, 2]);
+    assert.ok(alerts.some((a) => a.event === 'break_up' && a.key === 'BOX' && a.lock_ts === lock.lock_ts && a.bar > lock.bar));
+  }
+});
+
 test('every payload matches the relay schema (Pine ↔ relay contract)', async () => {
   const bars = randomWalk(1500, 7);
   const { raw } = await run(bars, { '표시 개수': 3, retest: true, expire: true });

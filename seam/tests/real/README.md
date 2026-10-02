@@ -31,7 +31,7 @@ node replay.mjs --expect ../real/btcusdt-1m-2026-09-28.tv.json --save ../real/bt
 # 여러 종목 · TF 에서 cases.md 에 남은 칸만큼 → candidates.md
 # @SINCE = TradingView 가 보여 주는 첫 봉 (무료 요금제 분 · 시간봉). 엔진도 그 봉에서 시작합니다.
 W=2026-08-20T05:00+09:00
-A=""; for s in BTCUSDT ETHUSDT SOLUSDT BNBUSDT LTCUSDT BCHUSDT; do A="$A BINANCE:$s@60@$W BINANCE:$s@240@$W BINANCE:$s@D"; done
+A=""; for s in BTCUSDT ETHUSDT SOLUSDT BNBUSDT LTCUSDT BCHUSDT AAVEUSDT ETCUSDT ZECUSDT COMPUSDT; do A="$A BINANCE:$s@60@$W BINANCE:$s@240@$W BINANCE:$s@D"; done
 node candidates.mjs $A --out ../real/candidates.md
 # 한 종목 · 구간의 이벤트 전체
 node replay.mjs --symbol BINANCE:ETHUSDT --tf 60 --from 2026-09-01T00:00+09:00 --to 2026-09-30T00:00+09:00

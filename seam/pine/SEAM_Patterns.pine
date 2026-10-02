@@ -515,7 +515,9 @@ f_evalTwoLine(int x1, float y1, int x2, float y2, int x3, float y3, int x4, floa
                     int   viol = vu + vl
                     float adh  = (f_adhesion(uN, us, lN, ls, now, left, now, true, mhV, mhX) + f_adhesion(uN, us, lN, ls, now, left, now, false, mlV, mlX)) / 2.0
                     if viol <= maxViol + 2 and adh >= 0.15
-                        int    needT = flagMode ? math.max(2, minTouch - 1) : minTouch
+                        // 박스는 두 선 모두 수평이고 앵커 쌍 가격차가 boxFlatR 이내라는 조건이 이미 강한 증거라서
+                        // 플래그와 같은 완화 접점을 쓴다 (선 기울기가 자유로운 삼각 · 채널은 3개 그대로)
+                        int    needT = flagMode or k == "BOX" ? math.max(2, minTouch - 1) : minTouch
                         float  hAtr  = hL / atr
                         float  dU    = uN - close
                         float  dL    = close - lN
