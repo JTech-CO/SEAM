@@ -8,6 +8,8 @@ TradingView 에서 본 확정 로그를 옮겨 적은 파일(`*.tv.json`)과, �
 | `btcusdt-1m-2026-09-28.tv.json` | BINANCE:BTCUSDT 1분, 2026-09-28 12:23~13:54 한국시간 확정 로그 8줄 (스크린샷에서 옮김) |
 | `ethusdt-1h-2026-09-30.tv.json` | BINANCE:ETHUSDT 1시간, 2026-09-27 05:00~09-30 10:00 확정 로그 8줄 (10-01 18:12 스크린샷, 이후 17:00 봉까지 추가 이벤트 없음) |
 | `ethusdt-1h-2026-09-30.klines.json` | 같은 구간 Binance 1시간 봉 3109개. 2026-10-01 대조 8/8 일치 |
+| `btcusdt-1h-2026-10-02.tv.json` | BINANCE:BTCUSDT 1시간, 2026-09-25 21:00~10-02 13:00 확정 로그 7줄 (PR #13 코드, 10-02 14:59 스크린샷. 가격이 가려진 맨 아래 줄은 뺌) |
+| `btcusdt-1h-2026-10-02.klines.json` | 같은 구간 Binance 1시간 봉 3161개. 2026-10-02 대조 7/7 일치 |
 | `candidates.md` | 사례 후보 목록 (TradingView 확인 전). `candidates.mjs` 로 다시 만듦 |
 | `btcusdt-1m-2026-09-28.klines.json` | 같은 구간 Binance 1분 봉 3092개 (로그 첫 줄 3000봉 전부터). 2026-09-30 대조 8/8 일치 |
 
