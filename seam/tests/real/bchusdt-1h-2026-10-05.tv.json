@@ -1,0 +1,19 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:BCHUSDT 1시간, 2026-10-05 23:34 무렵 한국시간 (SEAM 26.10.05, 후보 확인 화면). 10-04 14:00 이후 22:00 봉까지 formal 이벤트 없음",
+  "pine": "SEAM 26.10.05 (패널 머리글로 확인)",
+  "symbol": "BINANCE:BCHUSDT",
+  "tf": "60",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-10-05T22:00:00+09:00",
+  "events": [
+    { "code": "UP", "at": "2026-09-30T19:00:00+09:00", "key": "CHANNEL_DN", "px": [310.0] },
+    { "code": "RETEST", "at": "2026-09-30T20:00:00+09:00", "key": "CHANNEL_DN", "px": [311.1] },
+    { "code": "LOCK", "at": "2026-10-02T01:00:00+09:00", "key": "CHANNEL_FLAT", "px": [310.4, 303.4] },
+    { "code": "UP", "at": "2026-10-02T13:00:00+09:00", "key": "CHANNEL_FLAT", "px": [310.1] },
+    { "code": "FAIL", "at": "2026-10-03T03:00:00+09:00", "key": "CHANNEL_FLAT", "px": [300.4] },
+    { "code": "LOCK", "at": "2026-10-03T08:00:00+09:00", "key": "BOX", "px": [318.5, 303.8] },
+    { "code": "UP", "at": "2026-10-04T08:00:00+09:00", "key": "BOX", "px": [318.5] },
+    { "code": "RETEST", "at": "2026-10-04T14:00:00+09:00", "key": "BOX", "px": [318.4] }
+  ]
+}

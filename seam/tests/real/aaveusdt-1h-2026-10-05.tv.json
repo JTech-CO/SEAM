@@ -1,0 +1,19 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:AAVEUSDT 1시간, 2026-10-05 23:36 무렵 한국시간 (SEAM 26.10.05, 후보 확인 화면)",
+  "pine": "SEAM 26.10.05 (패널 머리글로 확인)",
+  "symbol": "BINANCE:AAVEUSDT",
+  "tf": "60",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-10-05T22:00:00+09:00",
+  "events": [
+    { "code": "RETEST", "at": "2026-09-27T23:00:00+09:00", "key": "TRI_ASC", "px": [153.13] },
+    { "code": "LOCK", "at": "2026-09-29T12:00:00+09:00", "key": "FLAG_BEAR", "px": [149.88, 144.87] },
+    { "code": "UP", "at": "2026-09-29T14:00:00+09:00", "key": "FLAG_BEAR", "px": [149.82] },
+    { "code": "LOCK", "at": "2026-10-03T06:00:00+09:00", "key": "FLAG_BULL", "px": [184.08, 177.27] },
+    { "code": "UP", "at": "2026-10-03T19:00:00+09:00", "key": "FLAG_BULL", "px": [181.30] },
+    { "code": "RETEST", "at": "2026-10-03T20:00:00+09:00", "key": "FLAG_BULL", "px": [182.49] },
+    { "code": "LOCK", "at": "2026-10-05T11:00:00+09:00", "key": "CHANNEL_FLAT", "px": [182.74, 177.37] },
+    { "code": "UP", "at": "2026-10-05T22:00:00+09:00", "key": "CHANNEL_FLAT", "px": [182.52] }
+  ]
+}

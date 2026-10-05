@@ -12,6 +12,9 @@ TradingView 에서 본 확정 로그를 옮겨 적은 파일(`*.tv.json`)과, �
 | `btcusdt-1h-2026-10-02.klines.json` | 같은 구간 Binance 1시간 봉 3161개. 2026-10-02 대조 7/7 일치 |
 | `bchusdt-1h-2026-10-03.tv.json` · `.klines.json` | BINANCE:BCHUSDT 1시간, 09-29 11:00~10-03 03:00 확정 로그 8줄 (PR #13 이전 판, 호가 0.1) + 봉. 8/8 일치 |
 | `zecusdt-1h-2026-10-03.tv.json` · `.klines.json` | BINANCE:ZECUSDT 1시간, 09-26 21:00~10-03 03:00 확정 로그 8줄 (PR #13 이전 판) + 봉. 8/8 일치 |
+| `bchusdt-1h-2026-10-05.tv.json` · `.klines.json` | BINANCE:BCHUSDT 1시간, 09-30 19:00~10-05 22:00 확정 로그 8줄 (`SEAM 26.10.05`, 접점 2개 박스 #973 포함) + 봉. 8/8 일치 |
+| `zecusdt-1h-2026-10-05.tv.json` · `.klines.json` | BINANCE:ZECUSDT 1시간, 09-27 19:00~10-05 22:00 확정 로그 8줄 (`SEAM 26.10.05`) + 봉. 8/8 일치 |
+| `aaveusdt-1h-2026-10-05.tv.json` · `.klines.json` | BINANCE:AAVEUSDT 1시간, 09-27 23:00~10-05 22:00 확정 로그 8줄 (`SEAM 26.10.05`) + 봉. 8/8 일치. 맨 아래 줄과 같은 봉의 이벤트 하나는 화면 밖(9번째 줄) |
 | `candidates.md` | 사례 후보 목록 (TradingView 확인 전). `candidates.mjs` 로 다시 만듦 |
 | `btcusdt-1m-2026-09-28.klines.json` | 같은 구간 Binance 1분 봉 3092개 (로그 첫 줄 3000봉 전부터). 2026-09-30 대조 8/8 일치 |
 
@@ -27,6 +30,7 @@ node replay.mjs --expect ../real/btcusdt-1m-2026-09-28.tv.json --save ../real/bt
 - 프록시를 거치는 환경(회사망 · 클라우드 개발 환경)에서는 앞에 `NODE_USE_ENV_PROXY=1` 을 붙입니다.
 - 로그 첫 줄보다 3000봉 앞부터 받아 워밍업합니다 (`--warmup` 으로 조정).
 - 마지막 줄이 `결과: TradingView 로그와 일치` 면 통과입니다. `PRICE` 는 값 차이, `MISSING` 은 엔진에 없는 이벤트, `EXTRA` 는 로그에 없는 엔진 이벤트입니다.
+- 로그는 최근 8줄만 보이므로 `EXTRA` 는 로그 맨 아래 줄 다음에 나온 엔진 이벤트만 셉니다. 같은 봉이라도 맨 아래 줄보다 먼저 나온 이벤트는 화면 밖으로 잘린 것이라 세지 않습니다.
 - 받은 `klines.json` 을 커밋하면 이후 `npm test` 가 인터넷 없이 같은 대조를 자동으로 돌립니다.
 
 ## 후보 찾기 (cases.md 3절)

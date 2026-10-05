@@ -52,7 +52,7 @@ node seam/demo/build.mjs
 
 - Pine v6. 함수 안에서 전역 변수에 `:=` 대입 불가 (배열 · 객체 필드 변경은 가능). 전역 변수는 쓰기 전에 선언되어 있어야 합니다.
 - 오프라인 엔진은 TradingView 컴파일러가 아닙니다. 두 엔진 모두 통과해도 TradingView 에서 "차트에 추가" 로 최종 확인이 필요합니다. 확인하면 `seam/tests/cases.md` 0절에 날짜 · 종목 · 결과를 한 줄 남깁니다.
-- `seam/tests/real/` 대조 시험은 오프라인 엔진이 TradingView 와 같은 결과를 내는지 봅니다 (BTCUSDT 1분 8/8 · ETHUSDT 1시간 8/8 · BTCUSDT 1시간 7/7 · BCHUSDT 1시간 8/8 · ZECUSDT 1시간 8/8 일치). 판정을 바꾸는 수정으로 깨지면 TradingView 로그를 새로 찍어 `*.tv.json` 을 바꾸고, 엔진 출력으로 덮어쓰지 않습니다.
+- `seam/tests/real/` 대조 시험은 오프라인 엔진이 TradingView 와 같은 결과를 내는지 봅니다 (BTC 1분 · 1시간, ETH 1시간, BCH · ZEC 1시간 이전 판, BCH · ZEC · AAVE 1시간 `SEAM 26.10.05` — 8건 모두 일치). 판정을 바꾸는 수정으로 깨지면 TradingView 로그를 새로 찍어 `*.tv.json` 을 바꾸고, 엔진 출력으로 덮어쓰지 않습니다.
 - 오프라인 엔진(piner)은 `math.round_to_mintick` · `format.mintick` 을 항상 0.01 단위로 반올림합니다. 판정 로직에는 이 함수들을 쓰지 않습니다 (TradingView 와 결과가 갈라짐). `syminfo.mintick` 값 자체는 맞습니다.
 - piner 의 `ta.pivothigh` · `ta.pivotlow` 는 같은 값이 양쪽 어디에 있어도 피벗을 막지만, TradingView 는 왼쪽 동률을 허용합니다. `harness.mjs` 가 TradingView 규칙으로 고쳐 쓰므로 piner 는 항상 `harness.mjs` 를 거쳐 씁니다 (`seam/tests/real/README.md`).
 - 패널 머리글에 코드 판 `REV` 가 보입니다 (`SEAM 26.10.05`). 판정 · 표시를 바꾸면 `REV` 를 그날 날짜로 바꿉니다. TradingView 확인 기록과 `*.tv.json` 의 `pine` 칸은 화면에 보인 판으로 적습니다.

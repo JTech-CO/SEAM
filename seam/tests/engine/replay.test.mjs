@@ -49,6 +49,14 @@ test('replay: comparison flags price, missing and extra events', async () => {
   const r = compare(events, dropped, candles.mintick);
   assert.equal(r.extra.length, 1);
   assert.equal(r.ok, false);
+
+  // the log shows its last rows only: an event emitted before the oldest row on the same bar was cut off,
+  // one emitted after it on that bar is extra
+  const ev = (code, key, barMs) => ({ code, key, barMs, px: [1] });
+  const bar = [ev('FAIL', 'A', 3600e3), ev('RETEST', 'B', 3600e3), ev('UP', 'C', 7200e3)];
+  const log = (...xs) => ({ until: new Date(7200e3).toISOString(), events: xs.map((e) => ({ ...e, at: new Date(e.barMs).toISOString() })) });
+  assert.ok(compare(bar, log(bar[1], bar[2]), 0.01).ok);
+  assert.deepEqual(compare(bar, log(bar[0], bar[2]), 0.01).extra.map((e) => e.key), ['B']);
 });
 
 // Real-chart parity: every seam/tests/real/<name>.tv.json with a committed <name>.klines.json must match.
