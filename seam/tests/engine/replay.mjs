@@ -111,13 +111,17 @@ export function digitsOf(mintick) {
 
 // expected: { events: [{ code, at, key, px: [...] }], until? } — a transcribed TradingView log.
 // Every expected event must appear at the same bar with the same key and prices within one tick.
-// Engine events inside [first expected bar, until] that the log does not have are reported as extra.
+// Engine events after the log's oldest row, up to `until`, that the log does not have are reported as extra.
+// "After" is in emission order: the log shows only its last rows, so an event emitted just before the oldest
+// row on the same bar was cut off the screen, not missed by TradingView.
 export function compare(events, expected, mintick) {
   const tol = mintick * 0.5 + 1e-9;
   const want = expected.events.map((w) => ({ ...w, barMs: Date.parse(w.at) }));
   const used = new Set();
+  const at = [];
   const rows = want.map((w) => {
     const i = events.findIndex((e, k) => !used.has(k) && e.code === w.code && e.key === w.key && e.barMs === w.barMs);
+    at.push(i);
     if (i < 0) return { want: w, status: 'missing' };
     used.add(i);
     const got = events[i];
@@ -126,7 +130,9 @@ export function compare(events, expected, mintick) {
   });
   const lo = Math.min(...want.map((w) => w.barMs));
   const hi = expected.until ? Date.parse(expected.until) : Math.max(...want.map((w) => w.barMs));
-  const extra = events.filter((e, k) => !used.has(k) && e.barMs >= lo && e.barMs <= hi);
+  const oldest = Math.min(...at.filter((i, n) => i >= 0 && want[n].barMs === lo));
+  const after = (e, k) => (Number.isFinite(oldest) ? k > oldest : e.barMs >= lo);
+  const extra = events.filter((e, k) => !used.has(k) && after(e, k) && e.barMs <= hi);
   return { rows, extra, ok: rows.every((r) => r.status === 'match') && extra.length === 0 };
 }
 

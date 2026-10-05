@@ -90,6 +90,9 @@ async function main() {
   found.sort((a, b) => b.lockMs - a.lockMs);
 
   const per = Number(o.per);
+  // slots filled: at most --per per key; rows beyond that are extra cases kept for a specific rule
+  const filled = KEYS.reduce((n, k) => n + Math.min(per, done.filter((d) => d.key === k).length), 0);
+  const extra = done.length - filled;
   const lines = [];
   const counts = [];
   let n = 0;
@@ -112,7 +115,7 @@ async function main() {
 오프라인 엔진이 Binance 봉에서 찾은 formal 구조입니다. **아직 사례가 아닙니다.** TradingView 에서 확인한 것만 \`cases.md\` 3절에 옮깁니다.
 
 - 만든 날: ${fmt(Date.now(), true)} 한국시간 · 코드 판 \`${REV}\` · 민감도 \`${o.sens}\` · 표시 개수 1
-- 기록된 사례 ${done.length} / ${KEYS.length * per} · 키마다 \`cases.md\` 에 남은 칸만큼, 최신순으로 종목 · TF 를 섞어서 골랐습니다. 이미 기록한 구조는 뺐습니다.
+- 기록된 사례 ${filled} / ${KEYS.length * per}${extra ? ` (추가 사례 ${extra}건 별도)` : ''} · 키마다 \`cases.md\` 에 남은 칸만큼, 최신순으로 종목 · TF 를 섞어서 골랐습니다. 이미 기록한 구조는 뺐습니다.
 - 명령: \`node candidates.mjs ${positionals.join(' ')}\` (seam/tests/engine, 인터넷 필요)
 - 시각은 한국시간, 봉 시작 시각입니다. 차트 시간대를 UTC+9 로 두면 그대로 찾을 수 있습니다.
 
@@ -132,7 +135,7 @@ ${series.map((s) => `- ${s}`).join('\n')}
 
 | # | 키 | 종목 · TF | 잠금 봉 | 잠금 상 / 하 | 이후 이벤트 | 확인 |
 |---|---|---|---|---|---|---|
-${lines.join('\n')}
+${lines.length ? lines.join('\n') : '|  | 남은 칸 없음 |  |  |  |  |  |'}
 
 ## 키별 현황
 

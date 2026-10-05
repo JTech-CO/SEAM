@@ -1,0 +1,19 @@
+{
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:ZECUSDT 1시간, 2026-10-05 23:35 무렵 한국시간 (SEAM 26.10.05, 후보 확인 화면). 10-05 14:00 이후 22:00 봉까지 formal 이벤트 없음",
+  "pine": "SEAM 26.10.05 (패널 머리글로 확인)",
+  "symbol": "BINANCE:ZECUSDT",
+  "tf": "60",
+  "tz": "Asia/Seoul",
+  "inputs": { "민감도": "normal", "표시 개수": 1 },
+  "until": "2026-10-05T22:00:00+09:00",
+  "events": [
+    { "code": "LOCK", "at": "2026-09-27T19:00:00+09:00", "key": "CUP_HANDLE", "px": [1698.00, 1631.78] },
+    { "code": "DOWN", "at": "2026-09-27T23:00:00+09:00", "key": "CUP_HANDLE", "px": [1631.78] },
+    { "code": "LOCK", "at": "2026-10-04T02:00:00+09:00", "key": "PENNANT_BEAR", "px": [1315.68, 1291.23] },
+    { "code": "UP", "at": "2026-10-04T04:00:00+09:00", "key": "PENNANT_BEAR", "px": [1313.97] },
+    { "code": "RETEST", "at": "2026-10-04T06:00:00+09:00", "key": "PENNANT_BEAR", "px": [1315.99] },
+    { "code": "LOCK", "at": "2026-10-05T04:00:00+09:00", "key": "FLAG_BULL", "px": [1350.44, 1317.71] },
+    { "code": "DOWN", "at": "2026-10-05T13:00:00+09:00", "key": "FLAG_BULL", "px": [1318.36] },
+    { "code": "RETEST", "at": "2026-10-05T14:00:00+09:00", "key": "FLAG_BULL", "px": [1317.92] }
+  ]
+}
