@@ -1,6 +1,6 @@
 {
-  "source": "TradingView 확정 로그 스크린샷, BINANCE:BTCUSDT 1시간, 2026-10-02 14:59 한국시간 (박스 접점 2개 규칙 적용 후 첫 확인). 맨 아래 줄(09-23 10:00 PENNANT_BULL RETEST)은 가격이 아이콘에 가려 뺐습니다",
-  "pine": "PR #13 이후 SEAM_Patterns.pine (BOX 접점 2개)",
+  "source": "TradingView 확정 로그 스크린샷, BINANCE:BTCUSDT 1시간, 2026-10-02 14:59 한국시간. 맨 아래 줄(09-23 10:00 PENNANT_BULL RETEST)은 가격이 아이콘에 가려 뺐습니다",
+  "pine": "PR #13 이전 판 (박스 접점 3개). 처음엔 PR #13 코드로 적었으나 2026-10-05 정정: 구조 번호 #877 이 이전 판 + TradingView 피벗 동률 규칙 + 2026-01-01 시작에서만 같음. 이 7줄은 현재 판에서도 같음",
   "symbol": "BINANCE:BTCUSDT",
   "tf": "60",
   "tz": "Asia/Seoul",

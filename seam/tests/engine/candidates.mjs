@@ -2,8 +2,9 @@
 // Case candidates for seam/tests/cases.md §3: runs the indicator on recent Binance candles for several
 // SYMBOL@TF[@SINCE] series and lists, per pattern key, as many formal structures as cases.md still needs
 // (--per minus the rows already recorded), newest first, spread across series. Structures already recorded
-// are skipped. SINCE (ISO time) is the first bar the TradingView plan loads: the run starts exactly there,
-// like the indicator on that chart, so even a short window (4h on the free plan) matches bar for bar.
+// are skipped. SINCE (ISO time) is the first bar the TradingView plan lets you scroll to: only structures locked
+// from there are listed. The run itself starts --lead bars earlier, because TradingView computes the indicator on
+// far more history than it shows (free plan, 1h: scroll from 08-20, structure ids say the run starts ~2026-01-01).
 // Without SINCE the run uses --bars of history and skips the first --warm bars.
 // Candidates are only a starting point: each one is confirmed on TradingView before it goes into cases.md.
 //
@@ -12,9 +13,12 @@ import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { KEYS } from '../../relay/src/schema.ts';
 import { KEY_NAMES, formatTf } from '../../relay/src/format.ts';
+import { PINE_PATH } from './harness.mjs';
 import { digitsOf, fetchCandles, runReplay, tickWarning } from './replay.mjs';
 
 const CASES = new URL('../cases.md', import.meta.url);
+// Code revision the candidates come from; the TradingView panel header shows the same string ("SEAM 26.10.05").
+const REV = fs.readFileSync(PINE_PATH, 'utf8').match(/const string REV = "([^"]+)"/)?.[1] ?? '?';
 
 const STEP = { 1: 60e3, 5: 300e3, 15: 900e3, 60: 3600e3, 240: 14400e3, D: 86400e3 };
 const TZ = 'Asia/Seoul';
@@ -48,7 +52,7 @@ async function main() {
   const { values: o, positionals } = parseArgs({
     allowPositionals: true,
     options: {
-      bars: { type: 'string', default: '5000' }, warm: { type: 'string', default: '300' },
+      bars: { type: 'string', default: '5000' }, warm: { type: 'string', default: '300' }, lead: { type: 'string', default: '3000' },
       per: { type: 'string', default: '3' }, sens: { type: 'string', default: 'normal' },
       out: { type: 'string' },
     },
@@ -63,7 +67,7 @@ async function main() {
     const [symbol, tf, since] = arg.split('@');
     if (since && Number.isNaN(Date.parse(since))) throw new Error(`bad SINCE in ${arg}`);
     if (!STEP[tf]) throw new Error(`unsupported tf in ${arg}`);
-    const startMs = since ? Date.parse(since) : Date.now() - Number(o.bars) * STEP[tf];
+    const startMs = since ? Date.parse(since) - Number(o.lead) * STEP[tf] : Date.now() - Number(o.bars) * STEP[tf];
     const c = await fetchCandles({ symbol, tf, startMs, endMs: Date.now() });
     if (tickWarning(c.mintick)) {
       // TradingView shows the true tick, the engine prints 0.01 steps: the lock prices could not be compared.
@@ -71,16 +75,16 @@ async function main() {
       continue;
     }
     const events = await runReplay(c, inputs);
-    const warmEnd = since ? c.bars[0][0] : c.bars[Math.min(Number(o.warm), c.bars.length - 1)][0];
+    // listed: locks from SINCE (first visible bar), or after the warm-up when there is no SINCE
+    const from = since ? Date.parse(since) : c.bars[Math.min(Number(o.warm), c.bars.length - 1)][0];
     const byId = new Map();
     for (const e of events) {
       const id = `${e.key}|${e.lockMs}`;
       if (!byId.has(id)) byId.set(id, { series: arg, symbol: c.symbol, tf: c.tf, key: e.key, lockMs: e.lockMs, digits: digitsOf(c.mintick), events: [] });
       byId.get(id).events.push(e);
     }
-    const from = Math.max(warmEnd, since ? Date.parse(since) : -Infinity);
     const list = [...byId.values()].filter((s) => s.events[0].code === 'LOCK' && s.lockMs >= from && !isDone(s));
-    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)}${since ? ' · TradingView 와 같은 첫 봉에서 시작' : ` · 앞 ${o.warm}봉은 워밍업으로 제외`} · 미기록 구조 ${list.length}`);
+    series.push(`${c.symbol} ${formatTf(c.tf)} · 봉 ${c.bars.length}개 ${fmt(c.bars[0][0], true)} ~ ${fmt(c.bars.at(-1)[0], true)}${since ? ` · ${fmt(Date.parse(since), true)} 부터 잠긴 구조만 (그 앞 ${o.lead}봉은 워밍업)` : ` · 앞 ${o.warm}봉은 워밍업으로 제외`} · 미기록 구조 ${list.length}`);
     found.push(...list);
   }
   found.sort((a, b) => b.lockMs - a.lockMs);
@@ -107,7 +111,7 @@ async function main() {
 
 오프라인 엔진이 Binance 봉에서 찾은 formal 구조입니다. **아직 사례가 아닙니다.** TradingView 에서 확인한 것만 \`cases.md\` 3절에 옮깁니다.
 
-- 만든 날: ${fmt(Date.now(), true)} 한국시간 · 민감도 \`${o.sens}\` · 표시 개수 1
+- 만든 날: ${fmt(Date.now(), true)} 한국시간 · 코드 판 \`${REV}\` · 민감도 \`${o.sens}\` · 표시 개수 1
 - 기록된 사례 ${done.length} / ${KEYS.length * per} · 키마다 \`cases.md\` 에 남은 칸만큼, 최신순으로 종목 · TF 를 섞어서 골랐습니다. 이미 기록한 구조는 뺐습니다.
 - 명령: \`node candidates.mjs ${positionals.join(' ')}\` (seam/tests/engine, 인터넷 필요)
 - 시각은 한국시간, 봉 시작 시각입니다. 차트 시간대를 UTC+9 로 두면 그대로 찾을 수 있습니다.
@@ -116,6 +120,7 @@ ${series.map((s) => `- ${s}`).join('\n')}
 
 ## 확인 방법
 
+0. TradingView 패널 머리글이 \`SEAM ${REV}\` 인지 봅니다. 다르면 차트의 SEAM 이 다른 판의 코드입니다. 저장소의 \`seam/pine/SEAM_Patterns.pine\` 을 Pine 편집기에 붙여 넣고 저장한 뒤 "차트에 추가" 합니다.
 1. TradingView 에서 **후보 줄의 종목 · TF 차트**로 바꿉니다 (예: \`BCHUSDT 1H\` → \`BINANCE:BCHUSDT\`, 1시간). 다른 종목 차트에서는 그 후보가 보이지 않습니다. SEAM 은 하나만, 민감도 normal, 표시 개수 1.
 2. 날짜로 이동(Alt+G)해 잠금 봉으로 갑니다. 잠금 다이아몬드에 마우스를 올려 툴팁의 잠금가가 아래 표와 같은지 봅니다.
 3. 선이 가격에 제대로 붙었는지(접점 · 밀착) 눈으로 판단합니다.

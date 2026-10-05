@@ -1,7 +1,7 @@
 // Spec §11 checklist, automated where an offline engine can check it.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Engine, ArrayFeed } from '@heyphat/piner';
+import { compile, Engine, ArrayFeed } from '@heyphat/piner';
 import { validateAlert } from '../../relay/src/schema.ts';
 import { getCompiled, makeBars, randomWalk, run, RUN } from './harness.mjs';
 import { expectedBreak, scenarios } from './scenarios.mjs';
@@ -12,6 +12,18 @@ const idOf = (a) => `${a.key}|${a.lock_ts}`;
 test('script compiles without diagnostics', () => {
   const c = getCompiled();
   assert.deepEqual(c.diagnostics ?? [], []);
+});
+
+// harness.mjs patches piner to TradingView's tie rule: an equal bar on the left is allowed, one on the right
+// vetoes, so the last bar of a plateau is the pivot. piner alone reported no pivot on either plateau.
+test('pivots follow the TradingView tie rule (left ties allowed, right ties veto)', async () => {
+  const src = '//@version=6\nindicator("pv")\nfloat ph = ta.pivothigh(high, 2, 2)\nfloat pl = ta.pivotlow(low, 2, 2)\n' +
+    'if not na(ph)\n    alert("H" + str.tostring(bar_index - 2))\nif not na(pl)\n    alert("L" + str.tostring(bar_index - 2))\n';
+  const shape = [1, 2, 5, 5, 3, 2, 1, 2, 4, 4, 4, 2, 1];
+  const bars = shape.map((h, i) => ({ time: i * 3600e3, open: 10, high: 10 + h, low: 10 - h, close: 10, volume: 1 }));
+  const eng = new Engine(compile(src), new ArrayFeed(bars));
+  await eng.run(RUN);
+  assert.deepEqual(eng.outputs.alerts.map((a) => a.message), ['H3', 'L3', 'H10', 'L10']);
 });
 
 // Synthetic swings sit on the lines, so noise can fake an early break of the first lock; a later,
