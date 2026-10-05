@@ -8,6 +8,35 @@ import { compile, Engine, ArrayFeed } from '@heyphat/piner';
 
 export const PINE_PATH = fileURLToPath(new URL('../../pine/SEAM_Patterns.pine', import.meta.url));
 
+// TradingView's ta.pivothigh / ta.pivotlow: a bar equal to the candidate on the left does not veto it, one on
+// the right does, so of two equal highs the later one is the pivot. piner vetoes on both sides. Equal highs are
+// common on coarse-tick symbols (ETCUSDT 1h: 0.01 tick at ~9 USD), and there the strict rule found other
+// structures than the TradingView log (seam/tests/real/README.md). Patched once for every engine in this process;
+// engine.test.mjs pins the rule.
+function tvPivot(isHigh) {
+  return function (src, left, right, site) {
+    const s = this.st(site, () => ({ buf: [] }));
+    s.buf.push(src);
+    const win = left + right + 1;
+    while (s.buf.length > win) s.buf.shift();
+    if (s.buf.length < win) return NaN;
+    const center = s.buf[left];
+    for (let i = 0; i < win; i++) {
+      if (i === left) continue;
+      const v = s.buf[i];
+      const beyond = isHigh ? (i < left ? v > center : v >= center) : (i < left ? v < center : v <= center);
+      if (beyond) return NaN;
+    }
+    return center;
+  };
+}
+const Ta = Object.getPrototypeOf(new Engine(compile('//@version=6\nindicator("ta")\nplot(close)'), new ArrayFeed([])).ctx?.ta ?? {});
+if (typeof Ta.pivothigh !== 'function' || typeof Ta.pivotlow !== 'function' || typeof Ta.st !== 'function') {
+  throw new Error('piner layout changed: ta.pivothigh not found, redo the TradingView pivot patch in harness.mjs');
+}
+Ta.pivothigh = tvPivot(true);
+Ta.pivotlow = tvPivot(false);
+
 let compiled;
 export function getCompiled() {
   compiled ??= compile(fs.readFileSync(PINE_PATH, 'utf8'));

@@ -31,6 +31,10 @@ const int FAM_C   = 0      // 수축류: 삼각 · 쐐기 · 페넌트
 const int FAM_P   = 1      // 평행류: 채널 · 박스 · 플래그
 const int FAM_R   = 2      // 반전류: 이중바닥 · 이중천장 · 컵핸들
 
+// 코드 판: 패널 머리글에 표시해 차트에 붙은 코드가 어느 판인지 스크린샷으로 확인 (tests/real 대조 자료의 pine 칸)
+// 판정 · 표시를 바꾸면 그날 날짜로 바꿈
+const string REV = "26.10.05"
+
 const string DISCLAIMER = "패턴 인식은 기하 조건의 충족을 표시할 뿐 가격을 예측하지 않습니다. 신호는 주문이 아닙니다. 투자 판단과 손익은 이용자 책임입니다."
 
 // ─────────────────────────────────────────────────────────────
@@ -1159,7 +1163,7 @@ if barstate.islast
     table.clear(panel, 0, 0, 1, 6)
     if iPanel
         Seam b = f_panelPick()
-        table.cell(panel, 0, 0, "SEAM", text_color = TXT, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
+        table.cell(panel, 0, 0, "SEAM " + REV, text_color = TXT, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
         table.cell(panel, 1, 0, iSens + (na(b) ? " · 구조 없음" : ""), text_color = SUB, text_size = TXT_SIZE, bgcolor = BG, text_halign = text.align_left, tooltip = DISCLAIMER)
         if not na(b) and atrOk
             float lu   = f_liveU(b, bar_index)
