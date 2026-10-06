@@ -1,0 +1,7 @@
+{
+  "series": [
+    { "symbol": "BINANCE:BTCUSDT", "tf": "60" },
+    { "symbol": "BINANCE:ETHUSDT", "tf": "60" }
+  ],
+  "inputs": { "민감도": "normal", "표시 개수": 1 }
+}

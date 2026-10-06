@@ -1,0 +1,23 @@
+# systemd unit for seam-scanner (Raspberry Pi 5 · Ubuntu Server). Install: seam/scanner/README.md 5절.
+# User and paths assume the default "ubuntu" user and a clone at ~/SEAM; change all three if yours differ.
+[Unit]
+Description=SEAM scanner (Binance closed bars -> SEAM_Patterns.pine -> Telegram)
+Wants=network-online.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/SEAM/seam/scanner
+ExecStart=/usr/bin/node --env-file=.env src/main.mjs
+Restart=always
+RestartSec=30
+# the scanner only reads the repo and writes its state file
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/SEAM/seam/scanner
+
+[Install]
+WantedBy=multi-user.target
