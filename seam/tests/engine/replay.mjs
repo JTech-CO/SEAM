@@ -7,7 +7,7 @@
 //   2. Parity (--expect): compare with a transcribed TradingView log. The scanner design
 //      (seam/docs/SCANNER.md) relies on the offline run matching TradingView on the same candles.
 //
-// Candles: Binance spot public market data (no key). This is not TradingView.
+// Candles: Binance spot public market data (no key, seam/scanner/src/binance.mjs). This is not TradingView.
 //
 //   node replay.mjs --symbol BINANCE:BTCUSDT --tf 1 --from 2026-09-28T12:00+09:00 --to 2026-09-28T14:00+09:00
 //   node replay.mjs --klines ../real/btcusdt-1m-2026-09-28.klines.json --expect ../real/btcusdt-1m-2026-09-28.tv.json
@@ -16,62 +16,12 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Engine, ArrayFeed } from '@heyphat/piner';
 import { getCompiled } from './harness.mjs';
+import { fetchCandles, TF } from '../../scanner/src/binance.mjs';
+import { ENGINE_PRICE_STEP, tickWarning } from '../../scanner/src/tv-compat.mjs';
 
-// TradingView timeframe → Binance interval and bar length
-const TF = {
-  1: ['1m', 60e3], 3: ['3m', 180e3], 5: ['5m', 300e3], 15: ['15m', 900e3], 30: ['30m', 1800e3],
-  60: ['1h', 3600e3], 120: ['2h', 7200e3], 240: ['4h', 14400e3], D: ['1d', 86400e3], W: ['1w', 604800e3],
-};
-// Market-data-only host first: api.binance.com answers 451 from some regions (US cloud runners).
-const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
-// piner reads syminfo.mintick correctly but math.round_to_mintick / format.mintick always round to 0.01.
-// Detection does not use them (only the JSON / tooltip / log text does), so below 0.01 the structures are
-// the same as TradingView but the printed prices are rounded. seam/docs/SCANNER.md 3.1 has the fix plan.
-export const ENGINE_PRICE_STEP = 0.01;
-export function tickWarning(mintick) {
-  return mintick < ENGINE_PRICE_STEP - 1e-12
-    ? `호가 단위 ${mintick} < ${ENGINE_PRICE_STEP}: 오프라인 엔진이 출력 가격을 ${ENGINE_PRICE_STEP} 단위로 반올림합니다 (구조 판정은 같음, 가격 비교는 불가)`
-    : '';
-}
+export { ENGINE_PRICE_STEP, fetchCandles, tickWarning };
+
 const CODE = { lock: 'LOCK', break_up: 'UP', break_down: 'DOWN', retest: 'RETEST', fail: 'FAIL', expire: 'EXPIRE' };
-
-async function getJson(path) {
-  const errors = [];
-  for (const host of HOSTS) {
-    try {
-      const res = await fetch(host + path, { signal: AbortSignal.timeout(15000) });
-      if (res.ok) return await res.json();
-      errors.push(`${host} ${res.status} ${(await res.text()).replace(/\s+/g, ' ').slice(0, 90)}`);
-    } catch (e) {
-      errors.push(`${host} ${e.cause?.code ?? e.message}`);
-    }
-  }
-  throw new Error(`Binance request failed: ${errors.join(', ')}`);
-}
-
-function splitSymbol(symbol) {
-  const [prefix, pair] = symbol.includes(':') ? symbol.split(':') : ['BINANCE', symbol];
-  if (prefix !== 'BINANCE') throw new Error(`only BINANCE:* is supported for now (got ${symbol})`);
-  return pair;
-}
-
-// Closed candles only: a candle whose close time has not passed is still forming (confirm-on-close).
-export async function fetchCandles({ symbol, tf, startMs, endMs, now = Date.now() }) {
-  const pair = splitSymbol(symbol);
-  const [interval, stepMs] = TF[tf] ?? [];
-  if (!interval) throw new Error(`unsupported tf ${tf} (use ${Object.keys(TF).join(' ')})`);
-  const info = await getJson(`/api/v3/exchangeInfo?symbol=${pair}`);
-  const tick = info.symbols?.[0]?.filters?.find((f) => f.filterType === 'PRICE_FILTER')?.tickSize;
-  const rows = [];
-  for (let t = startMs; t <= endMs; ) {
-    const page = await getJson(`/api/v3/klines?symbol=${pair}&interval=${interval}&startTime=${t}&endTime=${endMs}&limit=1000`);
-    if (!page.length) break;
-    for (const k of page) if (k[6] < now) rows.push([k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]);
-    t = page[page.length - 1][0] + stepMs;
-    if (page.length < 1000) break;
-  }
-  return { v: 1, source: 'binance-spot', symbol: `BINANCE:${pair}`, tf: String(tf), mintick: tick ? +tick : 0.01, bars: rows };
-}
 
 export async function runReplay(candles, inputs = {}) {
   const bars = candles.bars.map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume }));

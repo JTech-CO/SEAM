@@ -1,0 +1,21 @@
+{
+  "name": "seam-scanner",
+  "version": "1.1.0",
+  "private": true,
+  "description": "SEAM watchlist scanner: runs seam/pine/SEAM_Patterns.pine on Binance closed bars and sends the same alerts to Telegram",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/main.mjs",
+    "ping": "node --env-file-if-exists=.env src/main.mjs --ping",
+    "chat-id": "node --env-file-if-exists=.env src/main.mjs --chat-id",
+    "show": "node --env-file-if-exists=.env src/main.mjs --show 48",
+    "test": "node --test --test-concurrency=1 \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@heyphat/piner": "0.13.0"
+  }
+}

@@ -14,8 +14,9 @@ test('script compiles without diagnostics', () => {
   assert.deepEqual(c.diagnostics ?? [], []);
 });
 
-// harness.mjs patches piner to TradingView's tie rule: an equal bar on the left is allowed, one on the right
-// vetoes, so the last bar of a plateau is the pivot. piner alone reported no pivot on either plateau.
+// seam/scanner/src/tv-compat.mjs (applied in harness.mjs) patches piner to TradingView's tie rule: an equal bar
+// on the left is allowed, one on the right vetoes, so the last bar of a plateau is the pivot. piner alone reported
+// no pivot on either plateau.
 test('pivots follow the TradingView tie rule (left ties allowed, right ties veto)', async () => {
   const src = '//@version=6\nindicator("pv")\nfloat ph = ta.pivothigh(high, 2, 2)\nfloat pl = ta.pivotlow(low, 2, 2)\n' +
     'if not na(ph)\n    alert("H" + str.tostring(bar_index - 2))\nif not na(pl)\n    alert("L" + str.tostring(bar_index - 2))\n';

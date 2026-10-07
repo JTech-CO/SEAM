@@ -43,6 +43,22 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  scanner:
+    name: scanner (loop · restart · config)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: seam/scanner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: seam/scanner/package-lock.json
+      - run: npm ci
+      - run: npm test
+
   brand:
     name: brand · wording check
     runs-on: ubuntu-latest
